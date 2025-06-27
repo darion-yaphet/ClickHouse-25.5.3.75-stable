@@ -8,6 +8,7 @@ namespace DB
 class IParser;
 
 /// Parse query or set 'out_error_message'.
+/// 尝试解析查询。
 ASTPtr tryParseQuery(
     IParser & parser,
     const char * & _out_query_end, // query start as input parameter, query end as output
@@ -24,6 +25,7 @@ ASTPtr tryParseQuery(
 
 
 /// Parse query or throw an exception with error message.
+/// 解析查询或抛出异常。
 ASTPtr parseQueryAndMovePosition(
     IParser & parser,
     const char * & pos,                /// Moved to end of parsed fragment.
@@ -74,6 +76,8 @@ std::pair<const char *, bool> splitMultipartQuery(
 
 /** If the query contains raw data part, such as INSERT ... FORMAT ..., return a pointer to it.
   * The SQL parser stops at the raw data part, which is parsed by a separate parser.
+  * 如果查询包含原始数据部分，例如 INSERT ... FORMAT ...，则返回指向它的指针。
+  * SQL 解析器在原始数据部分停止，该部分由单独的解析器解析。
   */
 const char * getInsertData(const ASTPtr & ast);
 

@@ -50,6 +50,9 @@ struct HighlightedRange
 /** Collects variants, how parser could proceed further at rightmost position.
   * Also collects a mapping of parsed ranges for highlighting,
   * which is accumulated through the parsing.
+  * 收集解析器可以进一步前进的变体，
+  * 还收集解析的范围内的高亮映射，
+  * 通过解析累积。
   */
 struct Expected
 {
@@ -84,11 +87,13 @@ struct Expected
 
 
 /** Interface for parser classes
+  * 解析器接口
   */
 class IParser
 {
 public:
     /// Token iterator augmented with depth information. This allows to control recursion depth.
+    /// Token迭代器，增加了深度信息。这允许控制递归深度。
     struct Pos : TokenIterator
     {
         uint32_t depth = 0;
@@ -107,6 +112,7 @@ public:
         {
         }
 
+        /// 增加深度
         ALWAYS_INLINE void increaseDepth()
         {
             ++depth;
@@ -120,6 +126,13 @@ public:
               * The solution is to check not too frequently.
               * The frequency is arbitrary, but not too large, not too small,
               * and a power of two to simplify the division.
+              * 翻译：
+              * 有时最大解析深度可以由用户设置为高值，
+              * 但我们仍然希望避免堆栈溢出。
+              * 为此，我们可以使用checkStackSize函数，但它太重了。
+              * 解决方案是不要过于频繁地检查。
+              * 频率是任意的，但不要太小，不要太频繁，
+              * 并且是2的幂，以简化除法。
               */
 #if defined(USE_MUSL) || defined(SANITIZER) || !defined(NDEBUG)
             static constexpr uint32_t check_frequency = 128;
@@ -130,6 +143,7 @@ public:
                 checkStackSize();
         }
 
+        /// 减少深度
         ALWAYS_INLINE void decreaseDepth()
         {
             if (unlikely(depth == 0))
@@ -143,6 +157,7 @@ public:
     };
 
     /** Get the text of this parser parses. */
+    /// 获取解析器的名称
     virtual const char * getName() const = 0;
 
     /** Parse piece of text from position `pos`, but not beyond end of line (`end` - position after end of line),
@@ -152,6 +167,13 @@ public:
       *  to which it was possible to parse if parsing was unsuccessful,
       *  or what this parser parse if parsing was successful.
       * The string to which the [begin, end) range is included may be not 0-terminated.
+      * 
+      * 从位置`pos`解析文本，但不超过行尾(`end` - 行尾后的位置)，
+      * 移动指针`pos`到可以解析的最大位置，
+      * 如果成功，返回`true`并返回结果`node`，否则返回false，
+      * 在`expected`中写入可以解析的最大位置，
+      * 如果解析失败，则写入可以解析的最大位置，
+      * 如果解析成功，则写入解析器解析的内容。
       */
     virtual bool parse(Pos & pos, ASTPtr & node, Expected & expected) = 0;
 
@@ -191,6 +213,8 @@ public:
 
     /** If the parsed fragment should be highlighted in the query editor,
       * which type of highlighting to use?
+      * 如果解析的片段应该在查询编辑器中高亮，
+      * 使用哪种高亮类型？
       */
     virtual Highlight highlight() const
     {

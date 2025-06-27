@@ -229,9 +229,11 @@ std::string getUnmatchedParenthesesErrorMessage(
 }
 
 
+/// 获取 INSERT 查询的 AST。
 static ASTInsertQuery * getInsertAST(const ASTPtr & ast)
 {
     /// Either it is INSERT or EXPLAIN INSERT.
+    /// 要么是 INSERT 查询，要么是 EXPLAIN INSERT 查询。
     if (auto * explain = ast->as<ASTExplainQuery>())
     {
         if (auto explained_query = explain->getExplainedQuery())
@@ -254,6 +256,7 @@ const char * getInsertData(const ASTPtr & ast)
     return nullptr;
 }
 
+/// 尝试解析查询。
 ASTPtr tryParseQuery(
     IParser & parser,
     const char * & _out_query_end, /* also query begin as input parameter */
@@ -270,7 +273,9 @@ ASTPtr tryParseQuery(
     /// 获取查询开始位置
     const char * query_begin = _out_query_end;
     Tokens tokens(query_begin, all_queries_end, max_query_size, skip_insignificant);
+
     /// NOTE: consider use UInt32 for max_parser_depth setting.
+    /// NOTE: 考虑使用 UInt32 设置 max_parser_depth。
     IParser::Pos token_iterator(tokens, static_cast<uint32_t>(max_parser_depth), static_cast<uint32_t>(max_parser_backtracks));
 
     /// 如果查询结束或以分号结束，则返回空
@@ -294,11 +299,19 @@ ASTPtr tryParseQuery(
 
     /** A shortcut - if Lexer found invalid tokens, fail early without full parsing.
       * But there are certain cases when invalid tokens are permitted:
+      * 
+      * 一个快捷方式 - 如果Lexer发现无效的tokens，在完全解析之前失败。
+      * 但是有一些情况是允许无效的tokens的：
+      *
       * 1. INSERT queries can have arbitrary data after the FORMAT clause, that is parsed by a different parser.
+      * 1. INSERT查询可以有任意数据，这些数据由不同的解析器解析。
+      *
       * 2. It can also be the case when there are multiple queries separated by semicolons, and the first queries are ok
       * while subsequent queries have syntax errors.
+      * 2. 也可以是多个查询用分号隔开，前面的查询是正确的，后面的查询有语法错误。
       *
       * This shortcut is needed to avoid complex backtracking in case of obviously erroneous queries.
+      * 这个快捷方式是必要的，以避免在明显错误的查询情况下复杂的回溯。
       */
     /// 创建一个lookahead迭代器
     IParser::Pos lookahead(token_iterator);
@@ -335,6 +348,7 @@ ASTPtr tryParseQuery(
         return res;
 
     // More granular checks for queries other than INSERT w/inline data.
+    // 对除了 INSERT 查询之外的查询进行更细粒度的检查。
     /// Lexical error
     if (last_token.isError())
     {
@@ -344,6 +358,7 @@ ASTPtr tryParseQuery(
     }
 
     /// Unmatched parentheses
+    /// 未匹配的括号
     UnmatchedParentheses unmatched_parens = checkUnmatchedParentheses(TokenIterator(tokens));
     if (!unmatched_parens.empty())
     {
@@ -361,6 +376,7 @@ ASTPtr tryParseQuery(
     }
 
     /// Excessive input after query. Parsed query must end with end of data or semicolon or data for INSERT.
+    /// 查询后有过多输入。解析的查询必须以结束数据或分号或 INSERT 的数据结束。
     if (!token_iterator->isEnd()
         && token_iterator->type != TokenType::Semicolon)
     {
@@ -371,6 +387,7 @@ ASTPtr tryParseQuery(
     }
 
     // Skip the semicolon that might be left after parsing the VALUES format.
+    /// 跳过可能留下的分号，在解析 VALUES 格式后。
     while (token_iterator->type == TokenType::Semicolon)
     {
         ++token_iterator;
@@ -378,6 +395,7 @@ ASTPtr tryParseQuery(
 
     // If multi-statements are not allowed, then after semicolon, there must
     // be no non-space characters.
+    /// 如果多语句不允许多语句，则分号后必须没有非空字符。
     if (!allow_multi_statements
         && !token_iterator->isEnd())
     {
