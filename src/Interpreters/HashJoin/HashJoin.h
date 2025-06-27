@@ -42,6 +42,9 @@ class HashJoinMethods;
 /** Data structure for implementation of JOIN.
   * It is just a hash table: keys -> rows of joined ("right") table.
   * Additionally, CROSS JOIN is supported: instead of hash table, it use just set of blocks without keys.
+  * 数据结构用于实现JOIN。
+  * 它只是一个哈希表：键->连接的("右")表的行。
+  * 此外，支持CROSS JOIN：不是哈希表，而是使用没有键的块集。
   *
   * JOIN-s could be of these types:
   * - ALL × LEFT/INNER/RIGHT/FULL
@@ -51,6 +54,9 @@ class HashJoinMethods;
   * - CROSS
   *
   * ALL means usual JOIN, when rows are multiplied by number of matching rows from the "right" table.
+  *
+  * ALL表示普通的JOIN，当行乘以"右"表中匹配行的数量。
+  *
   * ANY uses one line per unique key from right table. For LEFT JOIN it would be any row (with needed joined key) from the right table,
   * for RIGHT JOIN it would be any row from the left table and for INNER one it would be any row from right and any row from left.
   * SEMI JOIN filter left table by keys that are present in right table for LEFT JOIN, and filter right table by keys from left table
@@ -79,21 +85,43 @@ class HashJoinMethods;
   * This hash table is in form of keys -> row in case of ANY or keys -> [rows...] in case of ALL.
   * This is done in insertFromBlock method.
   *
+  * 1. 从"右"表构建内存中的哈希表。
+  * 这个哈希表的形式是键->行，在ANY的情况下，或者键->[行...]，在ALL的情况下。
+  * 这是在insertFromBlock方法中完成的。
+  *
   * 2. Process "left" table and join corresponding rows from "right" table by lookups in the map.
   * This is done in joinBlock methods.
+  * 
+  * 2. 处理"左"表，并从哈希表中查找对应的行。
+  * 这是在joinBlock方法中完成的。
   *
   * In case of ANY LEFT JOIN - form new columns with found values or default values.
   * This is the most simple. Number of rows in left table does not change.
+  *
+  * 在ANY LEFT JOIN的情况下，形成新的列，并使用找到的值或默认值。
+  * 这是最简单的。左表的行数不会改变。
   *
   * In case of ANY INNER JOIN - form new columns with found values,
   *  and also build a filter - in what rows nothing was found.
   * Then filter columns of "left" table.
   *
+  * 在ANY INNER JOIN的情况下，形成新的列，并使用找到的值，
+  * 同时构建一个过滤器 - 在哪些行中没有找到任何东西。
+  * 然后过滤"左"表的列。
+  *
   * In case of ALL ... JOIN - form new columns with all found rows,
   *  and also fill 'offsets' array, describing how many times we need to replicate values of "left" table.
   * Then replicate columns of "left" table.
   *
+  * 翻译：
+  * 在ALL ... JOIN的情况下，形成新的列，并使用所有找到的行，
+  * 同时填充'offsets'数组，描述我们需要多少次复制"左"表的值。
+  * 然后复制"左"表的列。
+  *
   * How Nullable keys are processed:
+  *
+  * 翻译：
+  * 如何处理NULL键：
   *
   * NULLs never join to anything, even to each other.
   * During building of map, we just skip keys with NULL value of any component.
@@ -138,6 +166,9 @@ public:
 
     /** Add block of data from right hand of JOIN to the map.
       * Returns false, if some limit was exceeded and you should not insert more data.
+      *
+      * 将右表的块添加到哈希表中。
+      * 如果超过了某些限制，则返回false，并且不应该插入更多数据。
       */
     bool addBlockToJoin(const Block & source_block_, bool check_limits) override;
 
@@ -150,6 +181,9 @@ public:
 
     /** Join data from the map (that was previously built by calls to addBlockToJoin) to the block with data from "left" table.
       * Could be called from different threads in parallel.
+      *
+      * 将哈希表中的数据与"左"表的数据进行连接。
+      * 可以并行调用。
       */
     void joinBlock(Block & block, ExtraBlockPtr & not_processed) override;
 
@@ -175,6 +209,9 @@ public:
     }
 
     /** For RIGHT and FULL JOINs.
+      *
+      * 对于RIGHT和FULL JOINs。
+      *
       * A stream that will contain default values from left table, joined with rows from right table, that was not joined before.
       * Use only after all calls to joinBlock was done.
       * left_sample_block is passed without account of 'use_nulls' setting (columns will be converted to Nullable inside).

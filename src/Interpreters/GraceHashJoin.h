@@ -20,6 +20,8 @@ class HashJoin;
 /**
  * Efficient and highly parallel implementation of external memory JOIN based on HashJoin.
  * Supports most of the JOIN modes, except CROSS and ASOF.
+ * 高效的并行实现基于HashJoin的外部内存JOIN。
+ * 支持大多数JOIN模式，除了CROSS和ASOF。
  *
  * The joining algorithm consists of three stages:
  *
@@ -29,17 +31,35 @@ class HashJoin;
  * When the size of HashJoin exceeds the limits, we double the number of buckets.
  * There can be multiple threads calling addBlockToJoin, just like @ConcurrentHashJoin.
  *
+ * 1) 在第一阶段，我们通过@addBlockToJoin累积右表的块。
+ * 每个输入块根据行连接键的哈希值拆分为多个桶。
+ * 第一个桶被添加到内存中的HashJoin中，其余的桶被写入磁盘以进一步处理。
+ * 当HashJoin的大小超过限制时，我们增加桶的数量。
+ * 可以有多个线程调用addBlockToJoin，就像@ConcurrentHashJoin一样。
+ *
  * 2) At the second stage we process left table blocks via @joinBlock.
  * Again, each input block is split into multiple buckets by hash.
  * The first bucket is joined in-memory via HashJoin::joinBlock, and the remaining buckets are written to the disk.
+ *
+ * 2) 在第二阶段，我们通过@joinBlock处理左表的块。
+ * 同样，每个输入块根据行连接键的哈希值拆分为多个桶。
+ * 第一个桶通过HashJoin::joinBlock在内存中加入，其余的桶被写入磁盘。
  *
  * 3) When the last thread reading left table block finishes, the last stage begins.
  * Each @DelayedJoinedBlocksTransform calls repeatedly @getDelayedBlocks until there are no more unfinished buckets left.
  * Inside @getDelayedBlocks we select the next unprocessed bucket, load right table blocks from disk into in-memory HashJoin,
  * And then join them with left table blocks.
  *
+ * 3) 当最后一个读取左表块的线程完成时，最后一个阶段开始。
+ * 每个@DelayedJoinedBlocksTransform重复调用@getDelayedBlocks，直到没有未完成的桶为止。
+ * 在@getDelayedBlocks中，我们选择下一个未处理的桶，将右表块从磁盘加载到内存中的HashJoin中，
+ * 然后与左表块加入。
+ *
  * After joining the left table blocks, we can load non-joined rows from the right table for RIGHT/FULL JOINs.
  * Note that non-joined rows are processed in multiple threads, unlike HashJoin/ConcurrentHashJoin/MergeJoin.
+ *
+ * 在加入左表块后，我们可以从右表加载非连接行用于RIGHT/FULL JOIN。
+ * 注意，非连接行在多个线程中处理，与HashJoin/ConcurrentHashJoin/MergeJoin不同。
  */
 class GraceHashJoin final : public IJoin
 {

@@ -207,6 +207,7 @@ static void checkASTSizeLimits(const IAST & ast, const Settings & settings)
 
 
 /// Log query into text log (not into system table).
+/// 将查询日志记录到文本日志（不是系统表）。
 static void logQuery(const String & query, ContextPtr context, bool internal, QueryProcessingStage::Enum stage)
 {
     if (internal)
@@ -224,17 +225,21 @@ static void logQuery(const String & query, ContextPtr context, bool internal, Qu
         String comment = context->getSettingsRef()[Setting::log_comment];
         size_t max_query_size = context->getSettingsRef()[Setting::max_query_size];
 
+        // 如果注释长度大于最大查询大小，则截断注释
         if (comment.size() > max_query_size)
             comment.resize(max_query_size);
 
+        // 如果注释不为空，则添加注释信息
         if (!comment.empty())
             comment = fmt::format(" (comment: {})", comment);
 
         String line_info;
+        // 如果脚本行号不为空，则添加脚本行号信息
         if (client_info.script_line_number)
             line_info = fmt::format(" (query {}, line {})", client_info.script_query_number, client_info.script_line_number);
 
         String transaction_info;
+        // 如果当前事务不为空，则添加事务信息
         if (auto txn = context->getCurrentTransaction())
             transaction_info = fmt::format(" (TID: {}, TIDH: {})", txn->tid, txn->tid.getHash());
 
@@ -248,6 +253,7 @@ static void logQuery(const String & query, ContextPtr context, bool internal, Qu
             toOneLineQuery(query),
             QueryProcessingStage::toString(stage));
 
+        // 如果客户端跟踪上下文不为空，则添加客户端跟踪上下文信息
         if (client_info.client_trace_context.trace_id != UUID())
         {
             LOG_TRACE(getLogger("executeQuery"),
@@ -258,11 +264,12 @@ static void logQuery(const String & query, ContextPtr context, bool internal, Qu
 }
 
 /// Call this inside catch block.
+/// 在catch块中调用。
 static void setExceptionStackTrace(QueryLogElement & elem)
 {
     /// Disable memory tracker for stack trace.
     /// Because if exception is "Memory limit (for query) exceed", then we probably can't allocate another one string.
-
+    /// 禁用内存跟踪器，因为如果异常是"内存限制(查询)超过"，那么我们可能无法分配另一个字符串。
     LockMemoryExceptionInThread lock(VariableContext::Global);
 
     try
@@ -278,6 +285,7 @@ static void setExceptionStackTrace(QueryLogElement & elem)
 
 
 /// Log exception (with query info) into text log (not into system table).
+/// 将异常（包含查询信息）记录到文本日志（不是系统表）。
 static void logException(ContextPtr context, QueryLogElement & elem, bool log_error = true)
 {
     String comment;
@@ -286,11 +294,15 @@ static void logException(ContextPtr context, QueryLogElement & elem, bool log_er
 
     /// Message patterns like "{} (from {}){} (in query: {})" are not really informative,
     /// so we pass elem.exception_format_string as format string instead.
+    // 消息模式 "{} (from {}){} (in query: {})" 实际上并不具有信息性，
+    // 因此我们传递 elem.exception_format_string 作为格式字符串。
     PreformattedMessage message;
     message.format_string = elem.exception_format_string;
     message.format_string_args = elem.exception_format_string_args;
 
+    // 获取客户端信息
     const auto & client_info = context->getClientInfo();
+    // 获取脚本行号信息
     String line_info;
     if (client_info.script_line_number)
         line_info = fmt::format(" (query {}, line {})", client_info.script_query_number, client_info.script_line_number);
@@ -317,6 +329,7 @@ static void logException(ContextPtr context, QueryLogElement & elem, bool log_er
         LOG_INFO(getLogger("executeQuery"), message);
 }
 
+/// 将权限信息添加到查询日志元素中。
 static void
 addPrivilegesInfoToQueryLogElement(QueryLogElement & element, const ContextPtr context_ptr)
 {
@@ -328,6 +341,7 @@ addPrivilegesInfoToQueryLogElement(QueryLogElement & element, const ContextPtr c
     }
 }
 
+/// 将状态信息添加到查询日志元素中。
 static void
 addStatusInfoToQueryLogElement(QueryLogElement & element, const QueryStatusInfo & info, const ASTPtr query_ast, const ContextPtr context_ptr, std::chrono::system_clock::time_point time)
 {
@@ -364,6 +378,7 @@ addStatusInfoToQueryLogElement(QueryLogElement & element, const QueryStatusInfo 
 
     /// We need to refresh the access info since dependent views might have added extra information, either during
     /// creation of the view (PushingToViews chain) or while executing its internal SELECT
+    /// 我们需要刷新访问信息，因为依赖视图可能添加了额外信息，无论是创建视图时（PushingToViews 链）还是在执行其内部 SELECT 时。
     const auto & access_info = context_ptr->getQueryAccessInfo();
     {
         std::lock_guard lock(access_info.mutex);
@@ -377,6 +392,7 @@ addStatusInfoToQueryLogElement(QueryLogElement & element, const QueryStatusInfo 
 
     /// We copy QueryFactoriesInfo for thread-safety, because it is possible that query context can be modified by some processor even
     /// after query is finished
+    /// 我们复制 QueryFactoriesInfo 以确保线程安全，因为查询上下文可能被某些处理器修改，即使在查询完成后。
     const auto & factories_info(context_ptr->getQueryFactoriesInfo());
     {
         std::lock_guard lock(factories_info.mutex);
@@ -395,6 +411,7 @@ addStatusInfoToQueryLogElement(QueryLogElement & element, const QueryStatusInfo 
     addPrivilegesInfoToQueryLogElement(element, context_ptr);
 }
 
+/// 获取查询指标日志间隔。
 static UInt64 getQueryMetricLogInterval(ContextPtr context)
 {
     const auto & settings = context->getSettingsRef();
@@ -405,6 +422,7 @@ static UInt64 getQueryMetricLogInterval(ContextPtr context)
     return interval_milliseconds;
 }
 
+/// 记录查询开始。
 QueryLogElement logQueryStart(
     const std::chrono::time_point<std::chrono::system_clock> & query_start_time,
     const ContextMutablePtr & context,
@@ -685,9 +703,10 @@ void logQueryException(
     bool internal,
     bool log_error)
 {
+    // 获取设置
     const Settings & settings = context->getSettingsRef();
     auto log_queries = settings[Setting::log_queries] && !internal;
-
+    // 设置类型
     elem.type = QueryLogElementType::EXCEPTION_WHILE_PROCESSING;
     elem.exception_code = getCurrentExceptionCode();
     auto exception_message = getCurrentExceptionMessageAndPattern(/* with_stacktrace */ false);
@@ -695,11 +714,17 @@ void logQueryException(
     elem.exception_format_string = exception_message.format_string;
     elem.exception_format_string_args = exception_message.format_string_args;
 
+    // 获取进程列表元素
     QueryStatusPtr process_list_elem = context->getProcessListElement();
 
+    // 更新性能计数器，在日志查询之前
     /// Update performance counters before logging to query_log
     CurrentThread::finalizePerformanceCounters();
+
+    // 获取当前时间
     const auto time_now = std::chrono::system_clock::now();
+
+    // 设置事件时间
     elem.event_time = timeInSeconds(time_now);
     elem.event_time_microseconds = timeInMicroseconds(time_now);
 
@@ -745,6 +770,7 @@ void logQueryException(
     }
 }
 
+// 记录异常之前开始查询
 void logExceptionBeforeStart(
     const String & query_for_logging,
     UInt64 normalized_query_hash,
@@ -881,6 +907,7 @@ void logExceptionBeforeStart(
     }
 }
 
+// 验证分析器设置
 void validateAnalyzerSettings(ASTPtr ast, bool context_value)
 {
     if (ast->as<ASTSetQuery>())
@@ -917,6 +944,7 @@ void validateAnalyzerSettings(ASTPtr ast, bool context_value)
     }
 }
 
+// 执行查询
 static BlockIO executeQueryImpl(
     const char * begin,
     const char * end,
@@ -926,14 +954,21 @@ static BlockIO executeQueryImpl(
     ReadBuffer * istr,
     ASTPtr & out_ast)
 {
+    // 是否是内部查询
     const bool internal = flags.internal;
 
+    // query_span是一个特殊的span，当这个函数退出时，它的生命周期并没有结束，而是在查询完成时结束。
+    // 一些内部查询可能会通过将'internal'参数设置为'true'来递归地调用这个函数，
+    // 为了确保当前堆栈中的SpanHolders以正确的顺序结束，我们禁用了这些内部查询的span。
+    // 这不会影响最终的span日志，因为这些内部查询是由外部查询发出的，我们仍然有足够的span日志用于外部查询的执行。
+    //
     /// query_span is a special span, when this function exits, it's lifetime is not ended, but ends when the query finishes.
     /// Some internal queries might call this function recursively by setting 'internal' parameter to 'true',
     /// to make sure SpanHolders in current stack ends in correct order, we disable this span for these internal queries
     ///
     /// This does not have impact on the final span logs, because these internal queries are issued by external queries,
     /// we still have enough span logs for the execution of external queries.
+    // 创建一个span，如果内部查询，则不创建
     std::shared_ptr<OpenTelemetry::SpanHolder> query_span = internal ? nullptr : std::make_shared<OpenTelemetry::SpanHolder>("query");
     if (query_span && query_span->trace_id != UUID{})
         LOG_TRACE(getLogger("executeQuery"), "Query span trace_id for opentelemetry log: {}", query_span->trace_id);
@@ -946,8 +981,14 @@ static BlockIO executeQueryImpl(
     /// * Logging query duration (system.query_log)
     Stopwatch start_watch{CLOCK_MONOTONIC};
 
+    // 获取客户端信息
     const auto & client_info = context->getClientInfo();
 
+    // 如果查询不是内部查询，并且我们还没有看到initial_query_start_time，则初始化它为当前时间。
+    // 内部查询是那些在没有独立客户端上下文的情况下执行的查询，
+    // 因此不应该设置initial_query_start_time，因为这可能会引入数据竞争。
+    // 它也可能为非内部和非初始查询。例如，查询来自一个运行旧版本的clickhouse的初始化器。
+    // 另一方面，如果它被初始化，则将其作为查询的开始。
     if (!internal && client_info.initial_query_start_time == 0)
     {
         // If it's not an internal query and we don't see an initial_query_start_time yet, initialize it
@@ -981,12 +1022,15 @@ static BlockIO executeQueryImpl(
         {
             /// Do not parse Query
             /// Increment ProfileEvents::Query here because Interpreter is not created.
+            /// 增加查询事件计数
             ProfileEvents::increment(ProfileEvents::Query);
         }
         else if (settings[Setting::dialect] == Dialect::kusto && !internal)
         {
             if (!settings[Setting::allow_experimental_kusto_dialect])
-                throw Exception(ErrorCodes::SUPPORT_IS_DISABLED, "Support for Kusto Query Engine (KQL) is disabled (turn on setting 'allow_experimental_kusto_dialect')");
+                throw Exception(ErrorCodes::SUPPORT_IS_DISABLED,
+                                "Support for Kusto Query Engine (KQL) is disabled (turn on setting 'allow_experimental_kusto_dialect')");
+
             ParserKQLStatement parser(end, settings[Setting::allow_settings_after_format_in_insert]);
             /// TODO: parser should fail early when max_query_size limit is reached.
             out_ast = parseKQLQuery(parser, begin, end, "", max_query_size, settings[Setting::max_parser_depth], settings[Setting::max_parser_backtracks]);
@@ -994,7 +1038,8 @@ static BlockIO executeQueryImpl(
         else if (settings[Setting::dialect] == Dialect::prql && !internal)
         {
             if (!settings[Setting::allow_experimental_prql_dialect])
-                throw Exception(ErrorCodes::SUPPORT_IS_DISABLED, "Support for PRQL is disabled (turn on setting 'allow_experimental_prql_dialect')");
+                throw Exception(ErrorCodes::SUPPORT_IS_DISABLED,
+                                "Support for PRQL is disabled (turn on setting 'allow_experimental_prql_dialect')");
             ParserPRQLQuery parser(max_query_size, settings[Setting::max_parser_depth], settings[Setting::max_parser_backtracks]);
             out_ast = parseQuery(parser, begin, end, "", max_query_size, settings[Setting::max_parser_depth], settings[Setting::max_parser_backtracks]);
         }
@@ -1009,7 +1054,8 @@ static BlockIO executeQueryImpl(
             {
                 /// Verify that AST formatting is consistent:
                 /// If you format AST, parse it back, and format it again, you get the same string.
-
+                /// 验证AST格式化是否一致：
+                /// 如果格式化AST，解析它，然后再次格式化，你得到相同的字符串。
                 String formatted1 = out_ast->formatWithPossiblyHidingSensitiveData(
                     /*max_length=*/0,
                     /*one_line=*/true,
@@ -1019,11 +1065,13 @@ static BlockIO executeQueryImpl(
                     /*identifier_quoting_style=*/IdentifierQuotingStyle::Backticks);
 
                 /// The query can become more verbose after formatting, so:
+                /// 查询可能变得更冗长，所以：
                 size_t new_max_query_size = max_query_size > 0 ? (1000 + 2 * max_query_size) : 0;
 
                 ASTPtr ast2;
                 try
                 {
+                    /// 解析查询
                     ast2 = parseQuery(
                         parser,
                         formatted1.data(),
@@ -1035,6 +1083,7 @@ static BlockIO executeQueryImpl(
                 }
                 catch (const Exception & e)
                 {
+                    /// 如果解析失败，则抛出异常
                     if (e.code() == ErrorCodes::SYNTAX_ERROR)
                         throw Exception(ErrorCodes::LOGICAL_ERROR,
                             "Inconsistent AST formatting: the query:\n{}\ncannot parse query back from {}",
@@ -1045,6 +1094,7 @@ static BlockIO executeQueryImpl(
 
                 chassert(ast2);
 
+                /// 再次格式化AST
                 String formatted2 = ast2->formatWithPossiblyHidingSensitiveData(
                     /*max_length=*/0,
                     /*one_line=*/true,
@@ -1053,6 +1103,7 @@ static BlockIO executeQueryImpl(
                     /*identifier_quoting_rule=*/IdentifierQuotingRule::WhenNecessary,
                     /*identifier_quoting_style=*/IdentifierQuotingStyle::Backticks);
 
+                /// 如果两次格式化后的字符串不一致，则抛出异常
                 if (formatted1 != formatted2)
                     throw Exception(ErrorCodes::LOGICAL_ERROR,
                         "Inconsistent AST formatting: the query:\n{}\nWas parsed and formatted back as:\n{}",
@@ -1072,13 +1123,16 @@ static BlockIO executeQueryImpl(
 
         if (out_ast)
         {
+            /// 如果查询是INSERT查询，则获取数据
             if (const auto * insert_query = out_ast->as<ASTInsertQuery>(); insert_query && insert_query->data)
                 query_end = insert_query->data;
 
+            /// 如果查询是CREATE查询，则获取参数化视图
             if (const auto * create_query = out_ast->as<ASTCreateQuery>())
             {
                 is_create_parameterized_view = create_query->isParameterizedView();
             }
+            /// 如果查询是EXPLAIN查询，则获取参数化视图
             else if (const auto * explain_query = out_ast->as<ASTExplainQuery>())
             {
                 if (!explain_query->children.empty())
@@ -1088,7 +1142,9 @@ static BlockIO executeQueryImpl(
         }
 
         /// Replace ASTQueryParameter with ASTLiteral for prepared statements.
+        /// 替换ASTQueryParameter为ASTLiteral，用于准备语句。
         /// Even if we don't have parameters in query_context, check that AST doesn't have unknown parameters
+        /// 即使query_context中没有参数，也要检查AST中是否有未知参数
         bool probably_has_params = find_first_symbols<'{'>(begin, end) != end;
         if (out_ast && !is_create_parameterized_view && probably_has_params)
         {
@@ -1106,9 +1162,12 @@ static BlockIO executeQueryImpl(
         }
 
         /// Wipe any sensitive information (e.g. passwords) from the query.
+        /// 擦除查询中的敏感信息（例如密码）。
         /// MUST go before any modification (except for prepared statements,
         /// since it substitute parameters and without them query does not contain
         /// parameters), to keep query as-is in query_log and server log.
+        /// 必须放在任何修改之前（除了准备语句，因为它们替换参数，没有参数的查询不包含参数），
+        /// 以保持查询在query_log和server log中不变。
         if (out_ast && out_ast->hasSecretParts())
         {
             /// IAST::formatForLogging() wipes secret parts in AST and then calls wipeSensitiveDataAndCutToLength().
@@ -1139,18 +1198,22 @@ static BlockIO executeQueryImpl(
     }
 
     /// Avoid early destruction of process_list_entry if it was not saved to `res` yet (in case of exception)
+    /// 避免在process_list_entry未保存到`res`时过早销毁（在异常情况下）
     ProcessList::EntryPtr process_list_entry;
     BlockIO res;
     auto implicit_txn_control = std::make_shared<bool>(false);
     String query_database;
     String query_table;
 
+    /// 执行隐式事务控制查询
     auto execute_implicit_tcl_query = [implicit_txn_control](const ContextMutablePtr & query_context, ASTTransactionControl::QueryType tcl_type)
     {
         /// Unset the flag on COMMIT and ROLLBACK
+        /// 在COMMIT和ROLLBACK时取消标志
         SCOPE_EXIT({ if (tcl_type != ASTTransactionControl::BEGIN) *implicit_txn_control = false; });
 
         ASTPtr tcl_ast = std::make_shared<ASTTransactionControl>(tcl_type);
+        /// 执行事务控制查询
         InterpreterTransactionControlQuery tc(tcl_ast, query_context);
         tc.execute();
 
@@ -1315,8 +1378,11 @@ static BlockIO executeQueryImpl(
 
         if (async_insert)
         {
+            /// 如果当前事务存在，并且设置了throw_on_unsupported_query_inside_transaction，则抛出异常
             if (context->getCurrentTransaction() && settings[Setting::throw_on_unsupported_query_inside_transaction])
                 throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Async inserts inside transactions are not supported");
+
+            /// 如果设置了implicit_transaction，并且设置了throw_on_unsupported_query_inside_transaction，则抛出异常
             if (settings[Setting::implicit_transaction] && settings[Setting::throw_on_unsupported_query_inside_transaction])
                 throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Async inserts with 'implicit_transaction' are not supported");
 
@@ -1415,6 +1481,7 @@ static BlockIO executeQueryImpl(
             /// then set a pipeline with a source populated by the query result cache.
             auto get_result_from_query_result_cache = [&]()
             {
+                /// 如果查询是SELECT查询，并且启用了查询结果缓存，并且启用了从查询结果缓存中读取，则从查询结果缓存中获取结果
                 if (out_ast && can_use_query_result_cache && settings[Setting::enable_reads_from_query_cache])
                 {
                     QueryResultCache::Key key(out_ast, context->getCurrentDatabase(), *settings_copy, context->getCurrentQueryId(), context->getUserID(), context->getCurrentRoles());
@@ -1486,6 +1553,7 @@ static BlockIO executeQueryImpl(
                     }
                 }
 
+                /// 如果查询是INSERT查询，则保存插入表（不是表函数）
                 if (interpreter)
                 {
                     if (!interpreter->ignoreLimits())
@@ -1494,6 +1562,7 @@ static BlockIO executeQueryImpl(
                         limits.size_limits = SizeLimits(settings[Setting::max_result_rows], settings[Setting::max_result_bytes], settings[Setting::result_overflow_mode]);
                     }
 
+                    /// 如果查询是INSERT查询，则保存插入表（不是表函数）
                     if (auto * insert_interpreter = typeid_cast<InterpreterInsertQuery *>(interpreter.get()))
                     {
                         /// Save insertion table (not table function). TODO: support remote() table function.
@@ -1523,10 +1592,12 @@ static BlockIO executeQueryImpl(
 
                     /// If it is a non-internal SELECT query, and active (write) use of the query result cache is enabled, then add a
                     /// processor on top of the pipeline which stores the result in the query result cache.
+                    /// 如果查询是SELECT查询，并且启用了查询结果缓存，并且启用了写入查询结果缓存，则将结果存储在查询结果缓存中
+                    /// 如果查询不包含非确定性函数或系统表（通常是非确定性），则使用查询结果缓存。
                     if (can_use_query_result_cache && settings[Setting::enable_writes_to_query_cache])
                     {
                         /// Only use the query result cache if the query does not contain non-deterministic functions or system tables (which are typically non-deterministic)
-
+                        /// 如果查询包含非确定性函数或系统表（通常是非确定性），则不使用查询结果缓存。
                         const bool ast_contains_nondeterministic_functions = astContainsNonDeterministicFunctions(out_ast, context);
                         const bool ast_contains_system_tables = astContainsSystemTables(out_ast, context);
 
@@ -1640,7 +1711,9 @@ static BlockIO executeQueryImpl(
                 query_database,
                 query_table,
                 async_insert);
+            
             /// Also make possible for caller to log successful query finish and exception during execution.
+            /// 也使调用者能够记录成功查询完成和异常期间执行。
             auto finish_callback = [elem,
                                     context,
                                     out_ast,
@@ -1663,6 +1736,7 @@ static BlockIO executeQueryImpl(
                     execute_implicit_tcl_query(context, ASTTransactionControl::COMMIT);
             };
 
+            /// 异常回调
             auto exception_callback =
                 [start_watch, elem, context, out_ast, internal, my_quota(quota), implicit_txn_control, execute_implicit_tcl_query, query_span](
                     bool log_error) mutable
@@ -1698,6 +1772,7 @@ static BlockIO executeQueryImpl(
     return res;
 }
 
+// 执行查询
 std::pair<ASTPtr, BlockIO> executeQuery(
     const String & query,
     ContextMutablePtr context,
@@ -1730,6 +1805,7 @@ std::pair<ASTPtr, BlockIO> executeQuery(
     return std::make_pair(std::move(ast), std::move(res));
 }
 
+// 执行查询
 void executeQuery(
     ReadBuffer & istr,
     WriteBuffer & ostr,
@@ -1756,6 +1832,7 @@ void executeQuery(
         throw;
     }
 
+    // 检查 CPU 负载
     size_t max_query_size = context->getSettingsRef()[Setting::max_query_size];
 
     ProfileEvents::checkCPUOverload(context->getServerSettings()[ServerSetting::os_cpu_busy_time_threshold],
@@ -1763,6 +1840,7 @@ void executeQuery(
             context->getSettingsRef()[Setting::max_os_cpu_wait_time_ratio_to_throw],
             /*should_throw*/ true);
 
+    // 如果剩余缓冲区空间足够解析查询到 'max_query_size' 字节，则原地解析
     if (istr.buffer().end() - istr.position() > static_cast<ssize_t>(max_query_size))
     {
         /// If remaining buffer space in 'istr' is enough to parse query up to 'max_query_size' bytes, then parse inplace.
@@ -1775,6 +1853,7 @@ void executeQuery(
         /// FIXME: this is an extra copy not required for async insertion.
 
         /// If not - copy enough data into 'parse_buf'.
+        // 如果剩余缓冲区空间不足，则将数据复制到 'parse_buf' 中
         WriteBufferFromVector<PODArray<char>> out(parse_buf);
         LimitReadBuffer limit(istr, {.read_no_more = max_query_size + 1});
         copyData(limit, out);
@@ -1784,6 +1863,7 @@ void executeQuery(
         end = begin + parse_buf.size();
     }
 
+    // 创建 QueryResultDetails 对象
     QueryResultDetails result_details
     {
         .query_id = context->getClientInfo().current_query_id,
@@ -1814,24 +1894,29 @@ void executeQuery(
     String format_name;
     OutputFormatPtr output_format;
 
+    // 更新格式
     auto update_format_on_exception_if_needed = [&]()
     {
         if (!output_format)
         {
             try
             {
+                // 获取 ASTQueryWithOutput 对象
                 const ASTQueryWithOutput * ast_query_with_output = dynamic_cast<const ASTQueryWithOutput *>(ast.get());
                 format_name = ast_query_with_output && ast_query_with_output->format_ast != nullptr
                     ? getIdentifierName(ast_query_with_output->format_ast)
                     : context->getDefaultFormat();
 
+                // 获取输出格式
                 output_format = FormatFactory::instance().getOutputFormat(format_name, ostr, {}, context, output_format_settings);
                 if (output_format && output_format->supportsWritingException())
                 {
                     /// Force an update of the headers before we start writing
+                    // 设置内容类型和格式
                     result_details.content_type = output_format->getContentType();
                     result_details.format = format_name;
 
+                    // 设置结果详细信息
                     fiu_do_on(FailPoints::execute_query_calling_empty_set_result_func_on_exception,
                     {
                         // it will throw std::bad_function_call
@@ -1839,6 +1924,7 @@ void executeQuery(
                         set_result_details(result_details);
                     });
 
+                    // 如果 set_result_details 不为空，则设置结果详细信息
                     if (set_result_details)
                     {
                         /// reset set_result_details func to avoid calling in SCOPE_EXIT()
@@ -1856,6 +1942,7 @@ void executeQuery(
         }
     };
 
+    // 执行查询
     try
     {
         streams = executeQueryImpl(begin, end, context, flags, QueryProcessingStage::Complete, &istr, ast);
@@ -1868,6 +1955,7 @@ void executeQuery(
             if (output_format)
                 handle_exception_in_output_format(*output_format, format_name, context, output_format_settings);
         }
+        // 如果发生异常，则更新格式
         /// The timezone was already set before query was processed,
         /// But `session_timezone` setting could be modified in the query itself, so we update the value.
         result_details.timezone = DateLUT::instance().getTimeZone();
@@ -1878,28 +1966,35 @@ void executeQuery(
     /// But `session_timezone` setting could be modified in the query itself, so we update the value.
     result_details.timezone = DateLUT::instance().getTimeZone();
 
+    // 获取额外的 HTTP 响应头
     const Map & additional_http_headers = context->getSettingsRef()[Setting::http_response_headers].value;
     if (!additional_http_headers.empty())
     {
         for (const auto & key_value : additional_http_headers)
         {
+            // 如果 key_value 不是 Tuple 类型或 Tuple 大小不为 2，则抛出异常
             if (key_value.getType() != Field::Types::Tuple
                 || key_value.safeGet<Tuple>().size() != 2)
                 throw Exception(ErrorCodes::BAD_ARGUMENTS, "The value of the `additional_http_headers` setting must be a Map");
 
+            // 如果 key_value 的第一个元素不是 String 类型，则抛出异常
             if (key_value.safeGet<Tuple>().at(0).getType() != Field::Types::String)
                 throw Exception(ErrorCodes::BAD_ARGUMENTS, "The keys of the `additional_http_headers` setting must be Strings");
 
+            // 如果 key_value 的第二个元素不是 String 类型，则抛出异常
             if (key_value.safeGet<Tuple>().at(1).getType() != Field::Types::String)
                 throw Exception(ErrorCodes::BAD_ARGUMENTS, "The values of the `additional_http_headers` setting must be Strings");
 
+            // 获取 key 和 value
             String key = key_value.safeGet<Tuple>().at(0).safeGet<String>();
             String value = key_value.safeGet<Tuple>().at(1).safeGet<String>();
 
+            // 如果 key 或 value 包含 ASCII 控制字符，则抛出异常
             if (std::find_if(key.begin(), key.end(), isControlASCII) != key.end()
                 || std::find_if(value.begin(), value.end(), isControlASCII) != value.end())
                 throw Exception(ErrorCodes::BAD_ARGUMENTS, "The values of the `additional_http_headers` cannot contain ASCII control characters");
 
+            // 如果 key 已经存在，则抛出异常
             if (!result_details.additional_headers.emplace(key, value).second)
                 throw Exception(ErrorCodes::BAD_ARGUMENTS, "There are duplicate entries in the `additional_http_headers` setting");
         }
@@ -1908,11 +2003,14 @@ void executeQuery(
     auto & pipeline = streams.pipeline;
     bool pulling_pipeline = pipeline.pulling();
 
+    // 创建压缩缓冲区
     std::unique_ptr<WriteBuffer> compressed_buffer;
     try
     {
+        // 如果管道是推送模式
         if (pipeline.pushing())
         {
+            // 获取源数据
             auto pipe = getSourceFromASTInsertQuery(ast, true, pipeline.getHeader(), context, nullptr);
             pipeline.complete(std::move(pipe));
         }
@@ -2045,10 +2143,12 @@ void executeQuery(
         std::rethrow_exception(exception_ptr);
 }
 
+// 执行简单的块IO
 void executeTrivialBlockIO(BlockIO & streams, ContextPtr context)
 {
     try
     {
+        // 如果管道未初始化，则返回
         if (!streams.pipeline.initialized())
             return;
 
