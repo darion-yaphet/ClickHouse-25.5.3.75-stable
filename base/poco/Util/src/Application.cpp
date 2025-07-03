@@ -136,7 +136,6 @@ void Application::init(const ArgVec& args)
 	init();
 }
 
-
 void Application::init()
 {
 	Path appPath;
@@ -152,13 +151,16 @@ void Application::init()
 	processPocoOptions();
 }
 
-
+// 返回应用程序的名称
 const char* Application::name() const
 {
 	return "Application";
 }
 
-
+// 初始化应用程序和所有注册的子系统。
+// 子系统总是以它们注册的精确顺序初始化。
+//
+// 重写实现必须调用基类实现。
 void Application::initialize(Application& self)
 {
 	for (SubsystemVec::iterator it = _subsystems.begin(); it != _subsystems.end(); ++it)
@@ -199,7 +201,7 @@ void Application::setUnixOptions(bool flag)
 	_unixOptions = flag;
 }
 
-
+// 加载配置文件
 int Application::loadConfiguration(int priority)
 {
 	int n = 0;
@@ -211,6 +213,8 @@ int Application::loadConfiguration(int priority)
 		_pConfig->add(new PropertyFileConfiguration(confPath.toString()), priority, false, false);
 		++n;
 	}
+
+	// 加载ini文件
 #ifndef POCO_UTIL_NO_INIFILECONFIGURATION
 	if (findAppConfigFile(appPath.getBaseName(), "ini", confPath))
 	{
@@ -218,6 +222,8 @@ int Application::loadConfiguration(int priority)
 		++n;
 	}
 #endif
+
+	// 加载json文件
 #ifndef POCO_UTIL_NO_JSONCONFIGURATION
 	if (findAppConfigFile(appPath.getBaseName(), "json", confPath))
 	{
@@ -225,6 +231,8 @@ int Application::loadConfiguration(int priority)
 		++n;
 	}
 #endif
+
+	// 加载xml文件
 #ifndef POCO_UTIL_NO_XMLCONFIGURATION
 	if (findAppConfigFile(appPath.getBaseName(), "xml", confPath))
 	{
@@ -337,7 +345,7 @@ int Application::main(const ArgVec& args)
 	return EXIT_OK;
 }
 
-
+// 设置命令行参数
 void Application::setArgs(int argc, char* argv[])
 {
 	_command = argv[0];

@@ -44,6 +44,7 @@ namespace Util
     /// The Application class implements the main subsystem
     /// in a process. The application class is responsible for
     /// initializing all its subsystems.
+    ///  Application类实现了进程中的主子系统。Application类负责初始化所有其子系统。
     ///
     /// Subclasses can and should override the following virtual methods:
     ///   - initialize() (the one-argument, protected variant)
@@ -52,12 +53,22 @@ namespace Util
     ///   - defineOptions()
     ///   - handleOption()
     ///   - main()
+    /// 
+    /// 子类可以并且应该重写以下虚拟方法：
+    ///   - initialize() (单参数，受保护的变体)
+    ///   - uninitialize()
+    ///   - reinitialize()
+    ///   - defineOptions()
+    ///   - handleOption()
+    ///   - main()
     ///
     /// The application's main logic should be implemented in
     /// the main() method.
+    /// 应用程序的主逻辑应该在main()方法中实现。
     ///
     /// There may be at most one instance of the Application class
     /// in a process.
+    /// 在进程中，最多只能有一个Application类的实例。
     ///
     /// The Application class maintains a LayeredConfiguration (available
     /// via the config() member function) consisting of:
@@ -65,6 +76,11 @@ namespace Util
     ///     properties, as well as properties from bound command line arguments.
     ///   - a SystemConfiguration (priority 100)
     ///   - the configurations loaded with loadConfiguration().
+    /// 
+    /// Application类维护一个LayeredConfiguration(通过config()成员函数可用)，由以下部分组成：
+    ///   - 一个MapConfiguration(优先级-100)，存储应用程序特定的属性，以及从绑定命令行参数的属性。
+    ///   - 一个SystemConfiguration(优先级100)
+    ///   - 使用loadConfiguration()加载的配置。
     ///
     /// The Application class sets a few default properties in
     /// its configuration. These are:
@@ -76,12 +92,26 @@ namespace Util
     ///   - application.cacheDir: the path to the directory where user specific non-essential data files of the application should be stored.
     ///   - application.dataDir: the path to the directory where user specific data files of the application should be stored.
     ///   - application.tempDir: the path to the directory where user specific temporary files and other file objects of the application should be stored.
+    /// 
+    /// Application类在配置中设置了一些默认属性。这些属性是：
+    ///   - application.path: 应用程序可执行文件的绝对路径
+    ///   - application.name: 应用程序可执行文件的文件名
+    ///   - application.baseName: 应用程序可执行文件的文件名(不包括扩展名)
+    ///   - application.dir: 应用程序可执行文件所在的目录
+    ///   - application.configDir: 用户特定配置文件的目录
+    ///   - application.cacheDir: 用户特定非重要数据文件的目录
+    ///   - application.dataDir: 用户特定数据文件的目录
+    ///   - application.tempDir: 用户特定临时文件和其他文件对象的目录
     ///
     /// If loadConfiguration() has never been called, application.configDir will be equal to application.dir.
+    /// 如果loadConfiguration()从未被调用，application.configDir将等于application.dir。
     ///
     /// The POCO_APP_MAIN macro can be used to implement main(argc, argv).
+    /// POCO_APP_MAIN宏可以用于实现main(argc, argv)。
+    ///
     /// If POCO has been built with POCO_WIN32_UTF8, POCO_APP_MAIN supports
     /// Unicode command line arguments.
+    /// 如果POCO使用POCO_WIN32_UTF8构建，POCO_APP_MAIN支持Unicode命令行参数。
     {
     public:
         typedef std::vector<std::string> ArgVec;
@@ -91,6 +121,8 @@ namespace Util
         enum ExitCode
         /// Commonly used exit status codes.
         /// Based on the definitions in the 4.3BSD <sysexits.h> header file.
+        /// 
+        /// 常用的退出状态码。基于4.3BSD <sysexits.h>头文件中的定义。
         {
             EXIT_OK = 0, /// successful termination
             EXIT_USAGE = 64, /// command line usage error
@@ -111,6 +143,7 @@ namespace Util
         };
 
         enum ConfigPriority
+        /// 配置优先级。
         {
             PRIO_APPLICATION = -100,
             PRIO_DEFAULT = 0,
@@ -214,6 +247,8 @@ namespace Util
         virtual int run();
         /// Runs the application by performing additional (un)initializations
         /// and calling the main() method.
+        /// 
+        /// 运行应用程序，通过执行额外的(un)初始化并调用main()方法。
         ///
         /// First calls initialize(), then calls main(), and
         /// finally calls uninitialize(). The latter will be called
@@ -221,12 +256,20 @@ namespace Util
         /// an exception, main() will not be called and the exception
         /// will be propagated to the caller. If uninitialize() throws
         /// an exception, the exception will be propagated to the caller.
-
+        ///
+        /// 首先调用initialize()，然后调用main()，最后调用uninitialize()。
+        /// 如果initialize()抛出异常，main()将不会被调用，异常将传播给调用者。
+        /// 如果uninitialize()抛出异常，异常将传播给调用者。
+        
         std::string commandName() const;
         /// Returns the command name used to invoke the application.
+        /// 
+        /// 返回用于调用应用程序的命令名称。
 
         std::string commandPath() const;
         /// Returns the full command path used to invoke the application.
+        ///
+        /// 返回用于调用应用程序的完整命令路径。
 
         LayeredConfiguration & config() const;
         /// Returns the application's configuration.
@@ -291,6 +334,11 @@ namespace Util
         /// Initializes the application and all registered subsystems.
         /// Subsystems are always initialized in the exact same order
         /// in which they have been registered.
+        ///
+        /// 初始化应用程序和所有注册的子系统。
+        /// 子系统总是以它们注册的精确顺序初始化。
+        ///
+        /// 重写实现必须调用基类实现。
         ///
         /// Overriding implementations must call the base class implementation.
 
