@@ -13,9 +13,13 @@ class ActionsDAG;
 class QueryConditionCache;
 
 /** Implements WHERE, HAVING operations.
+  * 实现WHERE, HAVING操作。
   * Takes an expression, which adds to the block one ColumnUInt8 column containing the filtering conditions.
+  * 接受一个表达式，它向块添加一个包含过滤条件的ColumnUInt8列。
   * The expression is evaluated and result chunks contain only the filtered rows.
+  * 表达式被评估，结果块只包含过滤后的行。
   * If remove_filter_column is true, remove filter column from block.
+  * 如果remove_filter_column为true，则从块中删除过滤列。
   */
 class FilterTransform : public ISimpleTransform
 {

@@ -15,8 +15,10 @@ ASTPtr ASTShowIndexesQuery::clone() const
     return res;
 }
 
+/// 格式化查询实现。
 void ASTShowIndexesQuery::formatQueryImpl(WriteBuffer & ostr, const FormatSettings & settings, FormatState & state, FormatStateStacked frame) const
 {
+    // 格式化 SHOW 关键字。
     ostr << (settings.hilite ? hilite_keyword : "")
                   << "SHOW "
                   << (extended ? "EXTENDED " : "")

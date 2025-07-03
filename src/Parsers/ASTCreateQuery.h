@@ -18,7 +18,7 @@ class ASTSetQuery;
 class ASTSelectWithUnionQuery;
 struct CreateQueryUUIDs;
 
-
+/// 存储定义。
 class ASTStorage : public IAST
 {
 public:
@@ -52,28 +52,32 @@ protected:
 };
 
 
+/// 表达式列表。
 class ASTExpressionList;
 
+/// 列定义。
 class ASTColumns : public IAST
 {
 public:
-    ASTExpressionList * columns = nullptr;
-    ASTExpressionList * indices = nullptr;
-    ASTExpressionList * constraints = nullptr;
-    ASTExpressionList * projections = nullptr;
-    IAST              * primary_key = nullptr;
-    IAST              * primary_key_from_columns = nullptr;
+    ASTExpressionList * columns = nullptr; /// 列定义。
+    ASTExpressionList * indices = nullptr; /// 索引定义。
+    ASTExpressionList * constraints = nullptr; /// 约束定义。
+    ASTExpressionList * projections = nullptr; /// 投影定义。
+    IAST              * primary_key = nullptr; /// 主键定义。
+    IAST              * primary_key_from_columns = nullptr; /// 从列定义的主键。
 
     String getID(char) const override { return "Columns definition"; }
 
     ASTPtr clone() const override;
 
+    /// 检查是否为空。
     bool empty() const
     {
         return (!columns || columns->children.empty()) && (!indices || indices->children.empty()) && (!constraints || constraints->children.empty())
             && (!projections || projections->children.empty());
     }
 
+    /// 遍历子节点。
     void forEachPointerToChild(std::function<void(void**)> f) override
     {
         f(reinterpret_cast<void **>(&columns));
@@ -90,30 +94,31 @@ protected:
 
 
 /// CREATE TABLE or ATTACH TABLE query
+/// 创建表或附加表查询。
 class ASTCreateQuery : public ASTQueryWithTableAndOutput, public ASTQueryWithOnCluster
 {
 public:
-    bool attach{false};    /// Query ATTACH TABLE, not CREATE TABLE.
-    bool if_not_exists{false};
-    bool is_ordinary_view{false};
-    bool is_materialized_view{false};
-    bool is_live_view{false};
-    bool is_window_view{false};
+    bool attach{false};    /// 查询 ATTACH TABLE, 不是 CREATE TABLE.
+    bool if_not_exists{false}; /// 如果表不存在，则创建表。
+    bool is_ordinary_view{false}; /// 普通视图。
+    bool is_materialized_view{false}; /// 物化视图。
+    bool is_live_view{false}; /// 实时视图。
+    bool is_window_view{false}; /// 窗口视图。
     bool is_time_series_table{false}; /// CREATE TABLE ... ENGINE=TimeSeries() ...
-    bool is_populate{false};
+    bool is_populate{false}; /// 填充表。
     bool is_create_empty{false};    /// CREATE TABLE ... EMPTY AS SELECT ...
     bool is_clone_as{false};    /// CREATE TABLE ... CLONE AS ...
     bool replace_view{false}; /// CREATE OR REPLACE VIEW
     bool has_uuid{false}; // CREATE TABLE x UUID '...'
 
-    ASTColumns * columns_list = nullptr;
-    ASTExpressionList * aliases_list = nullptr; /// Aliases such as "(a, b)" in "CREATE VIEW my_view (a, b) AS SELECT 1, 2"
-    ASTStorage * storage = nullptr;
+    ASTColumns * columns_list = nullptr; /// 列定义。
+    ASTExpressionList * aliases_list = nullptr; /// 别名，例如 "CREATE VIEW my_view (a, b) AS SELECT 1, 2" 中的 "(a, b)"。
+    ASTStorage * storage = nullptr; /// 存储定义。
 
-    ASTPtr watermark_function;
-    ASTPtr lateness_function;
-    String as_database;
-    String as_table;
+    ASTPtr watermark_function; /// 水印函数。
+    ASTPtr lateness_function; /// 延迟函数。
+    String as_database; /// 数据库别名。
+    String as_table; /// 表别名。
     IAST * as_table_function = nullptr;
     ASTSelectWithUnionQuery * select = nullptr;
     ASTViewTargets * targets = nullptr;
@@ -165,19 +170,30 @@ public:
     /// Generates a random UUID for this create query if it's not specified already.
     /// The function also generates random UUIDs for inner target tables if this create query implies that
     /// (for example, if it's a `CREATE MATERIALIZED VIEW` query with an inner storage).
+    /// 为这个创建查询生成一个随机 UUID，如果它还没有指定。
+    /// 该函数还为内部目标表生成随机 UUID（如果这个创建查询暗示了这一点，例如，如果它是一个 `CREATE MATERIALIZED VIEW` 查询，并且有内部存储）。
     void generateRandomUUIDs();
 
     /// Removes UUID from this create query.
     /// The function also removes UUIDs for inner target tables from this create query (see also generateRandomUUID()).
+    /// 从这个创建查询中删除 UUID。
+    /// 该函数还从这个创建查询中删除内部目标表的 UUID（参见 also generateRandomUUID()）。
     void resetUUIDs();
 
     /// Returns information about a target table.
     /// If that information isn't specified in this create query (or even not allowed) then the function returns an empty value.
+    /// 返回目标表的信息。
+    /// 如果这个创建查询中没有指定这个信息（或者甚至不允许），那么函数返回一个空值。
     StorageID getTargetTableID(ViewTarget::Kind target_kind) const;
+    /// 检查目标表是否存在。
     bool hasTargetTableID(ViewTarget::Kind target_kind) const;
+    /// 返回内部目标表的 UUID。
     UUID getTargetInnerUUID(ViewTarget::Kind target_kind) const;
+    /// 检查是否存在内部 UUID。
     bool hasInnerUUIDs() const;
+    /// 返回内部目标表的引擎。
     std::shared_ptr<ASTStorage> getTargetInnerEngine(ViewTarget::Kind target_kind) const;
+    /// 设置内部目标表的引擎。
     void setTargetInnerEngine(ViewTarget::Kind target_kind, ASTPtr storage_def);
 
     bool is_materialized_view_with_external_target() const { return is_materialized_view && hasTargetTableID(ViewTarget::To); }

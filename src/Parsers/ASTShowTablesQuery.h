@@ -8,8 +8,8 @@
 namespace DB
 {
 
-
 /** Query SHOW TABLES or SHOW DATABASES or SHOW CLUSTERS or SHOW CACHES or SHOW MERGES
+  * 查询 SHOW TABLES 或 SHOW DATABASES 或 SHOW CLUSTERS 或 SHOW CACHES 或 SHOW MERGES。
   */
 class ASTShowTablesQuery : public ASTQueryWithOutput
 {

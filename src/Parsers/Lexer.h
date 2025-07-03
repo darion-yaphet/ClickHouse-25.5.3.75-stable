@@ -104,12 +104,15 @@ struct Token
     bool isEnd() const { return type == TokenType::EndOfStream; }
 };
 
-
+/// 词法分析器。
 class Lexer
 {
 public:
+    /// 构造函数。
     Lexer(const char * begin_, const char * end_, size_t max_query_size_ = 0)
             : begin(begin_), pos(begin_), end(end_), max_query_size(max_query_size_) {}
+
+    /// 获取下一个词法单元。
     Token nextToken();
 
 private:
@@ -122,6 +125,7 @@ private:
     Token nextTokenImpl();
 
     /// This is needed to disambiguate tuple access operator from floating point number (.1).
+    /// 需要区分元组访问操作符和浮点数（.1）。
     TokenType prev_significant_token_type = TokenType::Whitespace;   /// No previous token.
 };
 

@@ -26,6 +26,7 @@ class MemoryTracker;
 namespace DB
 {
 
+// 合并信息
 struct MergeInfo
 {
     std::string database;
@@ -63,7 +64,7 @@ using MergeListEntry = BackgroundProcessListEntry<MergeListElement, MergeInfo>;
 
 struct Settings;
 
-
+// 合并列表元素
 struct MergeListElement : boost::noncopyable
 {
     static const MergeTreePartInfo FAKE_RESULT_PART_FOR_PROJECTION;
@@ -126,6 +127,8 @@ struct MergeListElement : boost::noncopyable
 
 /** Maintains a list of currently running merges.
   * For implementation of system.merges table.
+  * 维护当前正在运行的合并列表。
+  * 用于实现 system.merges 表。
   */
 class MergeList final : public BackgroundProcessList<MergeListElement, MergeInfo>
 {

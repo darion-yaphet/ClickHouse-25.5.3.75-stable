@@ -23,20 +23,25 @@ public:
     struct DataStreamTraits
     {
         /// True if pipeline has single output port after this step.
+        /// 如果管道在步骤之后有单个输出端口，则为真。
         /// Examples: MergeSortingStep, AggregatingStep
         bool returns_single_stream;
 
         /// Won't change the number of ports for pipeline.
+        /// 不会改变管道的端口数量。
         /// Examples: true for ExpressionStep, false for MergeSortingStep
         bool preserves_number_of_streams;
 
         /// Doesn't change row order.
+        /// 不会改变行顺序。
         /// Examples: true for FilterStep, false for PartialSortingStep
         bool preserves_sorting;
     };
 
     /// This flags are used by QueryPlan optimizers.
+    /// 这些标志用于QueryPlan优化器。
     /// They can be changed after some optimizations.
+    /// 它们可以在某些优化后更改。
     struct TransformTraits
     {
         /// Won't change the total number of rows.
@@ -44,6 +49,7 @@ public:
         bool preserves_number_of_rows;
     };
 
+    /// 这些标志用于描述步骤的特性。
     struct Traits
     {
         DataStreamTraits data_stream_traits;

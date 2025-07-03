@@ -37,17 +37,22 @@ IAST::~IAST()
 {
     /** Create intrusive linked list of children to delete.
       * Each ASTPtr child contains pointer to next child to delete.
+      * 创建一个侵入式链接列表，用于删除子节点。
+      * 每个 ASTPtr 子节点包含指向要删除的下一个子节点的指针。
       */
     ASTPtr delete_list_head_holder = nullptr;
     const bool delete_directly = next_to_delete_list_head == nullptr;
     ASTPtr & delete_list_head_reference = next_to_delete_list_head ? *next_to_delete_list_head : delete_list_head_holder;
 
     /// Move children into intrusive list
+    /// 将子节点移动到侵入式列表中。
     for (auto & child : children)
     {
         /** If two threads remove ASTPtr concurrently,
           * it is possible that neither thead will see use_count == 1.
           * It is ok. Will need one more extra stack frame in this case.
+          * 如果两个线程同时删除 ASTPtr，则可能其中一个线程看不到 use_count == 1。
+          * 这是可以的。在这种情况下，需要一个额外的堆栈帧。
           */
         if (child.use_count() != 1)
             continue;
@@ -74,6 +79,8 @@ IAST::~IAST()
     {
         /** Extract child to delete from current list head.
           * Child will be destroyed at the end of scope.
+          * 从当前列表头中提取要删除的子节点。
+          * 子节点将在作用域结束时销毁。
           */
         ASTPtr child_to_delete;
         child_to_delete.swap(delete_list_head_reference);
@@ -82,8 +89,12 @@ IAST::~IAST()
         delete_list_head_reference = std::move(child_to_delete->next_to_delete);
 
         /** Pass list head into child before destruction.
-          * It is important to properly handle cases where subclass has member same as one of its children.
+          * 在子节点销毁之前，将列表头传递给子节点。
           *
+          * It is important to properly handle cases where subclass has member same as one of its children.
+          * 重要的是要正确处理子类有成员与其中一个子节点相同的情况。
+          *
+          * 例如：
           * class ASTSubclass : IAST
           * {
           *     ASTPtr first_child; /// Same as first child
@@ -92,11 +103,14 @@ IAST::~IAST()
           * In such case we must move children into list only in IAST destructor.
           * If we try to move child to delete children into list before subclasses desruction,
           * first child use count will be 2.
+          * 在这种情况下，我们必须只在 IAST 析构函数中将子节点移动到列表中。
+          * 如果我们尝试在子类销毁之前将子节点移动到列表中，则第一个子节点的 use_count 将为 2。
           */
         child_to_delete->next_to_delete_list_head = &delete_list_head_reference;
     }
 }
 
+/// 获取 AST 的大小。
 size_t IAST::size() const
 {
     size_t res = 1;
@@ -106,6 +120,7 @@ size_t IAST::size() const
     return res;
 }
 
+/// 检查 AST 的大小。
 size_t IAST::checkSize(size_t max_size) const
 {
     size_t res = 1;
@@ -118,7 +133,7 @@ size_t IAST::checkSize(size_t max_size) const
     return res;
 }
 
-
+/// 获取 AST 的哈希值。
 IASTHash IAST::getTreeHash(bool ignore_aliases) const
 {
     SipHash hash_state;
@@ -126,7 +141,7 @@ IASTHash IAST::getTreeHash(bool ignore_aliases) const
     return getSipHash128AsPair(hash_state);
 }
 
-
+/// 更新 AST 的哈希值。
 void IAST::updateTreeHash(SipHash & hash_state, bool ignore_aliases) const
 {
     updateTreeHashImpl(hash_state, ignore_aliases);
@@ -135,14 +150,14 @@ void IAST::updateTreeHash(SipHash & hash_state, bool ignore_aliases) const
         child->updateTreeHash(hash_state, ignore_aliases);
 }
 
-
+/// 更新 AST 的哈希值。
 void IAST::updateTreeHashImpl(SipHash & hash_state, bool /*ignore_aliases*/) const
 {
     auto id = getID();
     hash_state.update(id.data(), id.size());
 }
 
-
+/// 检查 AST 的深度。
 size_t IAST::checkDepthImpl(size_t max_depth) const
 {
     std::vector<std::pair<ASTPtr, size_t>> stack;
@@ -170,6 +185,7 @@ size_t IAST::checkDepthImpl(size_t max_depth) const
     return res;
 }
 
+/// 格式化 AST，可能隐藏敏感数据。
 String IAST::formatWithPossiblyHidingSensitiveData(
     size_t max_length,
     bool one_line,
@@ -188,6 +204,7 @@ String IAST::formatWithPossiblyHidingSensitiveData(
     return wipeSensitiveDataAndCutToLength(buf.str(), max_length);
 }
 
+/// 格式化 AST，用于日志。
 String IAST::formatForLogging(size_t max_length) const
 {
     return formatWithPossiblyHidingSensitiveData(
@@ -199,6 +216,7 @@ String IAST::formatForLogging(size_t max_length) const
         /*identifier_quoting_style=*/IdentifierQuotingStyle::Backticks);
 }
 
+/// 格式化 AST，用于错误消息。
 String IAST::formatForErrorMessage() const
 {
     return formatWithPossiblyHidingSensitiveData(
@@ -210,6 +228,7 @@ String IAST::formatForErrorMessage() const
         /*identifier_quoting_style=*/IdentifierQuotingStyle::Backticks);
 }
 
+/// 格式化 AST，显示敏感数据。
 String IAST::formatWithSecretsOneLine() const
 {
     return formatWithPossiblyHidingSensitiveData(
@@ -221,6 +240,7 @@ String IAST::formatWithSecretsOneLine() const
         /*identifier_quoting_style=*/IdentifierQuotingStyle::Backticks);
 }
 
+/// 格式化 AST，显示敏感数据。
 String IAST::formatWithSecretsMultiLine() const
 {
     return formatWithPossiblyHidingSensitiveData(
@@ -232,6 +252,7 @@ String IAST::formatWithSecretsMultiLine() const
         /*identifier_quoting_style=*/IdentifierQuotingStyle::Backticks);
 }
 
+/// 检查 AST 的子节点是否包含敏感数据。
 bool IAST::childrenHaveSecretParts() const
 {
     for (const auto & child : children)
@@ -248,7 +269,7 @@ void IAST::cloneChildren()
         child = child->clone();
 }
 
-
+/// 获取列名。
 String IAST::getColumnName() const
 {
     WriteBufferFromOwnString write_buffer;
@@ -256,7 +277,7 @@ String IAST::getColumnName() const
     return write_buffer.str();
 }
 
-
+/// 获取列名，不包含别名。
 String IAST::getColumnNameWithoutAlias() const
 {
     WriteBufferFromOwnString write_buffer;
@@ -264,7 +285,7 @@ String IAST::getColumnNameWithoutAlias() const
     return write_buffer.str();
 }
 
-
+/// 写入标识符。
 void IAST::FormatSettings::writeIdentifier(WriteBuffer & ostr, const String & name, bool ambiguous) const
 {
     checkIdentifier(name);
@@ -308,6 +329,7 @@ void IAST::FormatSettings::writeIdentifier(WriteBuffer & ostr, const String & na
     }
 }
 
+/// 检查标识符。
 void IAST::FormatSettings::checkIdentifier(const String & name) const
 {
     if (enforce_strict_identifier_format)
@@ -323,6 +345,7 @@ void IAST::FormatSettings::checkIdentifier(const String & name) const
     }
 }
 
+/// 打印 AST 树。
 void IAST::dumpTree(WriteBuffer & ostr, size_t indent) const
 {
     String indent_str(indent, '-');
@@ -337,6 +360,7 @@ void IAST::dumpTree(WriteBuffer & ostr, size_t indent) const
     }
 }
 
+/// 打印 AST 树。
 std::string IAST::dumpTree(size_t indent) const
 {
     WriteBufferFromOwnString wb;

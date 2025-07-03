@@ -9,17 +9,26 @@ namespace DB
 {
 
 /** Query with output options
+  * 支持输出选项的查询。
   * (supporting [INTO OUTFILE 'file_name'] [FORMAT format_name] [SETTINGS key1 = value1, key2 = value2, ...] suffix).
+  * 支持 [INTO OUTFILE 'file_name'] [FORMAT format_name] [SETTINGS key1 = value1, key2 = value2, ...] 后缀的查询。
   */
 class ASTQueryWithOutput : public IAST
 {
 public:
+    /// 输出文件。
     ASTPtr out_file;
+    /// 是否是 INTO OUTFILE WITH STDOUT。
     bool is_into_outfile_with_stdout = false;
+    /// 是否是 OUTFILE APPEND。
     bool is_outfile_append = false;
+    /// 是否是 OUTFILE TRUNCATE。
     bool is_outfile_truncate = false;
+    /// 格式化 AST。
     ASTPtr format_ast;
+    /// 设置 AST。
     ASTPtr settings_ast;
+    /// 压缩 AST。
     ASTPtr compression;
     ASTPtr compression_level;
 

@@ -29,6 +29,8 @@ namespace
 
 /** From position in (possible multiline) query, get line number and column number in line.
   * Used in syntax error message.
+  * 从位置（可能多行）查询中获取行号和列号。
+  * 用于语法错误消息。
   */
 std::pair<size_t, size_t> getLineAndCol(const char * begin, const char * pos)
 {
@@ -45,7 +47,7 @@ std::pair<size_t, size_t> getLineAndCol(const char * begin, const char * pos)
     return { line + 1, pos - begin + 1 };
 }
 
-
+/// 写入预期
 WriteBuffer & operator<< (WriteBuffer & out, const Expected & expected)
 {
     if (expected.variants.empty())
@@ -69,6 +71,7 @@ WriteBuffer & operator<< (WriteBuffer & out, const Expected & expected)
 
 
 /// Highlight the place of syntax error.
+/// 突出显示语法错误的位置。
 void writeQueryWithHighlightedErrorPositions(
     WriteBuffer & out,
     const char * begin,
@@ -103,7 +106,7 @@ void writeQueryWithHighlightedErrorPositions(
     out.write(pos, end - pos);
 }
 
-
+/// 写入查询周围错误。
 void writeQueryAroundTheError(
     WriteBuffer & out,
     const char * begin,
@@ -131,7 +134,7 @@ void writeQueryAroundTheError(
     }
 }
 
-
+/// 写入通用错误消息。
 void writeCommonErrorMessage(
     WriteBuffer & out,
     const char * begin,
@@ -173,7 +176,7 @@ void writeCommonErrorMessage(
     }
 }
 
-
+/// 获取语法错误消息。
 std::string getSyntaxErrorMessage(
     const char * begin,
     const char * end,
@@ -192,7 +195,7 @@ std::string getSyntaxErrorMessage(
     return out.str();
 }
 
-
+/// 获取词法错误消息。
 std::string getLexicalErrorMessage(
     const char * begin,
     const char * end,
@@ -207,7 +210,7 @@ std::string getLexicalErrorMessage(
     return out.str();
 }
 
-
+/// 获取未匹配括号错误消息。
 std::string getUnmatchedParenthesesErrorMessage(
     const char * begin,
     const char * end,
@@ -227,7 +230,6 @@ std::string getUnmatchedParenthesesErrorMessage(
 }
 
 }
-
 
 /// 获取 INSERT 查询的 AST。
 static ASTInsertQuery * getInsertAST(const ASTPtr & ast)
@@ -249,6 +251,7 @@ static ASTInsertQuery * getInsertAST(const ASTPtr & ast)
     return nullptr;
 }
 
+/// 获取 INSERT 查询的数据。
 const char * getInsertData(const ASTPtr & ast)
 {
     if (const ASTInsertQuery * insert = getInsertAST(ast))
@@ -468,6 +471,7 @@ ASTPtr parseQuery(
 }
 
 
+/// 分割多语句查询。
 std::pair<const char *, bool> splitMultipartQuery(
     const std::string & queries,
     std::vector<std::string> & queries_list,

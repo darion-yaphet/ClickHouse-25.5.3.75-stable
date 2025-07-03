@@ -6,6 +6,7 @@ namespace DB
 {
 
 /// Implements WHERE, HAVING operations. See FilterTransform.
+/// 实现WHERE, HAVING操作。See FilterTransform.
 class FilterStep : public ITransformingStep
 {
 public:

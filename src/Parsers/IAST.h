@@ -182,6 +182,7 @@ public:
             set(field, child);
     }
 
+    /// 重置子节点。
     template <typename T>
     void reset(T * & field)
     {
@@ -230,6 +231,7 @@ public:
         bool print_pretty_type_names;
         bool enforce_strict_identifier_format;
 
+        /// 构造函数。
         explicit FormatSettings(
             bool one_line_,
             bool hilite_ = false,
@@ -256,6 +258,7 @@ public:
     };
 
     /// State. For example, a set of nodes can be remembered, which we already walk through.
+    /// 状态。例如，可以记住已经遍历的节点集。
     struct FormatState
     {
         /** The SELECT query in which the alias was found; identifier of a node with such an alias.
@@ -268,6 +271,7 @@ public:
     };
 
     /// The state that is copied when each node is formatted. For example, nesting level.
+    /// 当每个节点被格式化时，复制的状态。例如，嵌套级别。
     struct FormatStateStacked
     {
         UInt16 indent = 0;
@@ -294,6 +298,7 @@ public:
     }
 
     /// TODO: Move more logic into this class (see https://github.com/ClickHouse/ClickHouse/pull/45649).
+    /// 将更多逻辑移动到这个类中（见 https://github.com/ClickHouse/ClickHouse/pull/45649）。
     struct FormattingBuffer
     {
         WriteBuffer & ostr;
@@ -397,13 +402,16 @@ protected:
         formatImpl(FormattingBuffer{ostr, settings, state, std::move(frame)});
     }
 
+    /// 格式化实现。
     virtual void formatImpl(FormattingBuffer /*out*/) const
     {
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Unknown element in AST: {}", getID());
     }
 
+    /// 子节点是否包含敏感部分。
     bool childrenHaveSecretParts() const;
 
+    /// 某些 AST 类有裸指针到子元素作为成员。
     /// Some AST classes have naked pointers to children elements as members.
     /// This method allows to iterate over them.
     /// 某些 AST 类有裸指针到子元素作为成员。
@@ -411,10 +419,14 @@ protected:
     virtual void forEachPointerToChild(std::function<void(void**)>) {}
 
 private:
+    /// 检查深度实现。
     size_t checkDepthImpl(size_t max_depth) const;
 
     /** Forward linked list of ASTPtr to delete.
+      * 前向链接列表的 ASTPtr 到删除。
+      *
       * Used in IAST destructor to avoid possible stack overflow.
+      * 用于在 IAST 析构函数中避免可能的堆栈溢出。
       */
     ASTPtr next_to_delete = nullptr;
     ASTPtr * next_to_delete_list_head = nullptr;

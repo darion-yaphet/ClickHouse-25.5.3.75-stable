@@ -13,6 +13,7 @@
 namespace DB
 {
 
+/// 格式化 SQL 安全类型。
 void ASTSQLSecurity::formatImpl(WriteBuffer & ostr, const FormatSettings & settings, FormatState & state, FormatStateStacked frame) const
 {
     if (!type)
@@ -68,40 +69,55 @@ ASTPtr ASTStorage::clone() const
     return res;
 }
 
+/// 格式化存储定义。
 void ASTStorage::formatImpl(WriteBuffer & ostr, const FormatSettings & s, FormatState & state, FormatStateStacked frame) const
 {
     auto modified_frame{frame};
+
+    /// 格式化引擎。
     if (engine)
     {
         modified_frame.create_engine_name = engine->name;
         ostr << (s.hilite ? hilite_keyword : "") << s.nl_or_ws << "ENGINE" << (s.hilite ? hilite_none : "") << " = ";
         engine->format(ostr, s, state, modified_frame);
     }
+
+    /// 格式化分区。
     if (partition_by)
     {
         ostr << (s.hilite ? hilite_keyword : "") << s.nl_or_ws << "PARTITION BY " << (s.hilite ? hilite_none : "");
         partition_by->format(ostr, s, state, modified_frame);
     }
+
+    /// 格式化主键。
     if (primary_key)
     {
         ostr << (s.hilite ? hilite_keyword : "") << s.nl_or_ws << "PRIMARY KEY " << (s.hilite ? hilite_none : "");
         primary_key->format(ostr, s, state, modified_frame);
     }
+
+    /// 格式化排序。
     if (order_by)
     {
         ostr << (s.hilite ? hilite_keyword : "") << s.nl_or_ws << "ORDER BY " << (s.hilite ? hilite_none : "");
         order_by->format(ostr, s, state, modified_frame);
     }
+
+    /// 格式化采样。
     if (sample_by)
     {
         ostr << (s.hilite ? hilite_keyword : "") << s.nl_or_ws << "SAMPLE BY " << (s.hilite ? hilite_none : "");
         sample_by->format(ostr, s, state, modified_frame);
     }
+
+    /// 格式化 TTL。
     if (ttl_table)
     {
         ostr << (s.hilite ? hilite_keyword : "") << s.nl_or_ws << "TTL " << (s.hilite ? hilite_none : "");
         ttl_table->format(ostr, s, state, modified_frame);
     }
+
+    /// 格式化设置。
     if (settings)
     {
         ostr << (s.hilite ? hilite_keyword : "") << s.nl_or_ws << "SETTINGS " << (s.hilite ? hilite_none : "");

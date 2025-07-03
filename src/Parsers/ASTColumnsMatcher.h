@@ -9,7 +9,10 @@ namespace DB
 class WriteBuffer;
 
 /** SELECT COLUMNS('regexp') is expanded to multiple columns like * (asterisk).
+  * SELECT COLUMNS('regexp') 被扩展为多个列，如 * (asterisk)。
   * Optional transformers can be attached to further manipulate these expanded columns.
+  * 可选的转换器可以附加到这些扩展的列上。
+  * 正则表达式匹配器。
   */
 class ASTColumnsRegexpMatcher : public IAST
 {

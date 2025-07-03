@@ -190,6 +190,7 @@ public:
     }
 
     /** The same, but do not move the position and do not write the result to node.
+      * 与上面相同，但不会移动位置，也不会将结果写入节点。
       */
     bool check(Pos & pos, Expected & expected)
     {
@@ -204,6 +205,7 @@ public:
     }
 
     /** The same, but doesn't move the position even if parsing was successful.
+      * 与上面相同，但即使解析成功也不会移动位置。
      */
     bool checkWithoutMoving(Pos pos, Expected & expected)
     {

@@ -426,6 +426,7 @@ static std::string getCanonicalPath(std::string && path)
     return std::move(path);
 }
 
+// 配置和启动一个服务器套接字
 Poco::Net::SocketAddress Server::socketBindListen(
     const Poco::Util::AbstractConfiguration & config,
     Poco::Net::ServerSocket & socket,
@@ -433,6 +434,7 @@ Poco::Net::SocketAddress Server::socketBindListen(
     UInt16 port,
     [[maybe_unused]] bool secure) const
 {
+    // 1. 创建一个SocketAddress对象，表示要监听的地址和端口
     auto address = makeSocketAddress(host, port, &logger());
     socket.bind(address, /* reuseAddress = */ true, /* reusePort = */ config.getBool("listen_reuse_port", false));
     /// If caller requests any available port from the OS, discover it after binding.
@@ -468,6 +470,10 @@ Strings getInterserverListenHosts(const Poco::Util::AbstractConfiguration & conf
     return getListenHosts(config);
 }
 
+// 1. 获取配置文件中的listen_try参数
+// 2. 如果listen_try为false，则检查是否存在任何监听主机和端口
+// 3. 如果存在，则返回true
+// 4. 否则返回false
 bool getListenTry(const Poco::Util::AbstractConfiguration & config)
 {
     bool listen_try = config.getBool("listen_try", false);
@@ -485,7 +491,6 @@ bool getListenTry(const Poco::Util::AbstractConfiguration & config)
     return listen_try;
 }
 
-
 void Server::createServer(
     Poco::Util::AbstractConfiguration & config,
     const std::string & listen_host,
@@ -496,10 +501,12 @@ void Server::createServer(
     CreateServerFunc && func) const
 {
     /// For testing purposes, user may omit tcp_port or http_port or https_port in configuration file.
+    /// 为了测试目的，用户可能省略配置文件中的tcp_port或http_port或https_port
     if (config.getString(port_name, "").empty())
         return;
 
     /// If we already have an active server for this listen_host/port_name, don't create it again
+    /// 如果已经有一个活跃的服务器用于这个listen_host/port_name，则不要再次创建
     for (const auto & server : servers)
     {
         if (!server.isStopping() && server.getListenHost() == listen_host && server.getPortName() == port_name)
@@ -540,6 +547,7 @@ void Server::createServer(
 namespace
 {
 
+// 设置OOM分数
 void setOOMScore(int value, LoggerRawPtr log)
 {
     try
@@ -590,6 +598,7 @@ int Server::run()
 
 void Server::initialize(Poco::Util::Application & self)
 {
+    // 1. 注册嵌入式配置文件
     ConfigProcessor::registerEmbeddedConfig("config.xml", std::string_view(reinterpret_cast<const char *>(gresource_embedded_xmlData), gresource_embedded_xmlSize));
     BaseDaemon::initialize(self);
     logger().information("starting up");
@@ -817,16 +826,19 @@ void sanityChecks(Server & server)
 
 }
 
+// 加载并执行配置文件中定义的启动脚本
 void loadStartupScripts(const Poco::Util::AbstractConfiguration & config, ContextMutablePtr context, Poco::Logger * log)
 {
     try
     {
+        // 获取配置文件中 startup_scripts 节点的所有子节点
         Poco::Util::AbstractConfiguration::Keys keys;
         config.keys("startup_scripts", keys);
 
         SetResultDetailsFunc callback;
         std::vector<String> skipped_startup_scripts;
 
+        // 遍历所有子节点
         for (const auto & key : keys)
         {
             std::string full_prefix = "startup_scripts." + key;
@@ -901,6 +913,7 @@ void loadStartupScripts(const Poco::Util::AbstractConfiguration & config, Contex
     }
 }
 
+// 初始化 Azure SDK 日志记录器
 static void initializeAzureSDKLogger(
     [[ maybe_unused ]] const ServerSettings & server_settings,
     [[ maybe_unused ]] int server_logs_level)
@@ -941,6 +954,7 @@ static void initializeAzureSDKLogger(
 }
 
 #if defined(SANITIZER)
+// 获取当前编译器启用的所有 sanitizer 名称
 static std::vector<String> getSanitizerNames()
 {
     std::vector<String> names;
@@ -966,20 +980,25 @@ int Server::main(const std::vector<std::string> & /*args*/)
 try
 {
 #if USE_JEMALLOC
+    // 设置 jemalloc 后台线程
     setJemallocBackgroundThreads(true);
 #endif
 
 #if USE_SSL
+    // 初始化 ssh 库
     ::ssh::LibSSHInitializer::instance();
     ::ssh::libsshLogger::initialize();
 #endif
 
+    // 启动时间计时器
     Stopwatch startup_watch;
 
     Poco::Logger * log = &logger();
 
+    // 获取主线程状态
     MainThreadStatus::getInstance();
 
+    // 加载配置文件
     ServerSettings server_settings;
     server_settings.loadSettingsFromConfig(config());
 
@@ -989,9 +1008,11 @@ try
     /// This will point libhdfs3 to the right location for its config.
     /// Note: this has to be done once at server initialization, because 'setenv' is not thread-safe.
 
+    // 获取 libhdfs3 配置文件路径
     String libhdfs3_conf = config().getString("hdfs.libhdfs3_conf", "");
     if (!libhdfs3_conf.empty())
     {
+        // 如果 libhdfs3_conf 是相对路径且不存在，则从配置文件中获取 libhdfs3_conf 路径
         if (std::filesystem::path{libhdfs3_conf}.is_relative() && !std::filesystem::exists(libhdfs3_conf))
         {
             const String config_path = config().getString("config-file", "config.xml");
@@ -1003,35 +1024,61 @@ try
     }
 #endif
 
+    // 获取 NUMA 节点总内存
     if (auto total_numa_memory = getNumaNodesTotalMemory(); total_numa_memory.has_value())
     {
         LOG_INFO(
             log, "ClickHouse is bound to a subset of NUMA nodes. Total memory of all available nodes: {}", ReadableSize(*total_numa_memory));
     }
 
+    // 注册解释器
     registerInterpreters();
-    registerFunctions();
-    registerAggregateFunctions();
-    registerTableFunctions();
-    registerDatabases();
-    registerStorages();
-    registerDictionaries();
-    registerDisks(/* global_skip_access_check= */ false);
-    registerFormats();
-    registerRemoteFileMetadatas();
-    registerSchedulerNodes();
 
+    // 注册函数
+    registerFunctions();
+    
+    // 注册聚合函数
+    registerAggregateFunctions();
+
+    // 注册表函数
+    registerTableFunctions();
+
+    // 注册数据库
+    registerDatabases();
+    
+    // 注册存储
+    registerStorages();
+
+    // 注册字典
+    registerDictionaries();
+
+    // 注册磁盘
+    registerDisks(/* global_skip_access_check= */ false);
+    
+    // 注册格式
+    registerFormats();
+
+    // 注册远程文件元数据
+    registerRemoteFileMetadatas();
+
+    // 注册调度节点
+    registerSchedulerNodes();
+    
+    // 注册查询计划步骤
     QueryPlanStepRegistry::registerPlanSteps();
 
+    // 设置当前版本号
     CurrentMetrics::set(CurrentMetrics::Revision, ClickHouseRevision::getVersionRevision());
     CurrentMetrics::set(CurrentMetrics::VersionInteger, ClickHouseRevision::getVersionInteger());
 
     /** Context contains all that query execution is dependent:
       *  settings, available functions, data types, aggregate functions, databases, ...
       */
+    // 创建共享上下文
     auto shared_context = Context::createShared();
     global_context = Context::createGlobal(shared_context.get());
 
+    // 创建全局上下文
     global_context->makeGlobalContext();
     global_context->setApplicationType(Context::ApplicationType::SERVER);
 
@@ -1061,6 +1108,7 @@ try
 #endif
 
 #if defined(SANITIZE_COVERAGE) || WITH_COVERAGE
+    // 添加覆盖率警告消息
     global_context->addOrUpdateWarningMessage(
         Context::WarningType::SERVER_BUILT_WITH_COVERAGE,
         PreformattedMessage::create("Server was built with code coverage. It will work slowly."));
@@ -1092,7 +1140,9 @@ try
     LOG_INFO(log, "Available CPU instruction sets: {}", cpu_info);
 #endif
 
+    // 检查是否启用了 trace 收集器
     bool has_trace_collector = false;
+
     /// Disable it if we collect test coverage information, because it will work extremely slow.
 #if !WITH_COVERAGE
     /// Profilers cannot work reliably with any other libunwind or without PHDR cache.
@@ -1116,8 +1166,11 @@ try
 
     // Settings validation for page cache. Ensure that page_cache_max_size is > page_cache_min_size.
     // Otherwise, crash might happen during cache resizing in src/Common/PageCache.cpp::autoResize
+    // 获取页面缓存最小大小
     size_t page_cache_min_size = server_settings[ServerSetting::page_cache_min_size];
+    // 获取页面缓存最大大小
     size_t page_cache_max_size = server_settings[ServerSetting::page_cache_max_size];
+    // 检查页面缓存最大大小是否大于页面缓存最小大小
     if (page_cache_max_size != 0 && (page_cache_min_size > page_cache_max_size))
     {
         throw Exception(
@@ -1130,6 +1183,7 @@ try
     // Initialize global thread pool. Do it before we fetch configs from zookeeper
     // nodes (`from_zk`), because ZooKeeper interface uses the pool. We will
     // ignore `max_thread_pool_size` in configs we fetch from ZK, but oh well.
+    // 初始化全局线程池
     GlobalThreadPool::initialize(
         server_settings[ServerSetting::max_thread_pool_size],
         server_settings[ServerSetting::max_thread_pool_free_size],
@@ -1137,24 +1191,30 @@ try
         has_trace_collector ? server_settings[ServerSetting::global_profiler_real_time_period_ns] : 0,
         has_trace_collector ? server_settings[ServerSetting::global_profiler_cpu_time_period_ns] : 0);
 
+    // 如果启用了 trace 收集器，则创建 trace 收集器
     if (has_trace_collector)
     {
         global_context->createTraceCollector();
 
         /// Set up server-wide memory profiler (for total memory tracker).
+        // 设置服务器范围的内存分析器（用于总内存跟踪器）
         if (server_settings[ServerSetting::total_memory_profiler_step])
             total_memory_tracker.setProfilerStep(server_settings[ServerSetting::total_memory_profiler_step]);
 
+        // 设置总内存跟踪器采样概率
         if (server_settings[ServerSetting::total_memory_tracker_sample_probability] > 0.0)
             total_memory_tracker.setSampleProbability(server_settings[ServerSetting::total_memory_tracker_sample_probability]);
 
+        // 设置总内存跟踪器采样最小分配大小
         if (server_settings[ServerSetting::total_memory_profiler_sample_min_allocation_size])
             total_memory_tracker.setSampleMinAllocationSize(server_settings[ServerSetting::total_memory_profiler_sample_min_allocation_size]);
 
+        // 设置总内存跟踪器采样最大分配大小
         if (server_settings[ServerSetting::total_memory_profiler_sample_max_allocation_size])
             total_memory_tracker.setSampleMaxAllocationSize(server_settings[ServerSetting::total_memory_profiler_sample_max_allocation_size]);
     }
 
+    // 初始化服务器线程池
     Poco::ThreadPool server_pool(
         /* minCapacity */3,
         /* maxCapacity */server_settings[ServerSetting::max_connections],
@@ -1163,11 +1223,17 @@ try
         server_settings[ServerSetting::global_profiler_real_time_period_ns],
         server_settings[ServerSetting::global_profiler_cpu_time_period_ns]);
 
+    // 创建服务器锁
     std::mutex servers_lock;
+
+    // 创建服务器列表
     std::vector<ProtocolServerAdapter> servers;
+
+    // 创建服务器列表
     std::vector<ProtocolServerAdapter> servers_to_start_before_tables;
 
     /// Wait for all threads to avoid possible use-after-free (for example logging objects can be already destroyed).
+    // 等待所有线程避免可能的 use-after-free（例如日志对象可能已经销毁）。
     SCOPE_EXIT({
         Stopwatch watch;
         LOG_INFO(log, "Waiting for background threads");
@@ -1177,6 +1243,7 @@ try
 
     if (page_cache_max_size != 0)
     {
+        // 设置页面缓存
         global_context->setPageCache(
             std::chrono::milliseconds(Int64(server_settings[ServerSetting::page_cache_history_window_ms])),
             server_settings[ServerSetting::page_cache_policy],
@@ -1188,6 +1255,7 @@ try
         total_memory_tracker.setPageCache(global_context->getPageCache().get());
     }
 
+    // 创建内存工作器
     MemoryWorker memory_worker(
         server_settings[ServerSetting::memory_worker_period_ms],
         server_settings[ServerSetting::memory_worker_correct_memory_tracker],
@@ -1195,6 +1263,7 @@ try
         global_context->getPageCache());
 
     /// This object will periodically calculate some metrics.
+    /// 这个对象将定期计算一些指标。
     ServerAsynchronousMetrics async_metrics(
         global_context,
         server_settings[ServerSetting::asynchronous_metrics_update_period_s],
@@ -1219,6 +1288,7 @@ try
 
     /// NOTE: global context should be destroyed *before* GlobalThreadPool::shutdown()
     /// Otherwise GlobalThreadPool::shutdown() will hang, since Context holds some threads.
+    /// 注意：全局上下文应该在 GlobalThreadPool::shutdown() 之前销毁，否则 GlobalThreadPool::shutdown() 将挂起，因为 Context 持有一些线程。
     SCOPE_EXIT({
         async_metrics.stop();
 
@@ -1233,6 +1303,7 @@ try
 
         LOG_DEBUG(log, "Shut down storages.");
 
+        // 如果服务器列表不为空，则等待当前连接完成
         if (!servers_to_start_before_tables.empty())
         {
             LOG_DEBUG(log, "Waiting for current connections to servers for tables to finish.");
@@ -1263,6 +1334,7 @@ try
         global_context->shutdownKeeperDispatcher();
 
         /// Wait server pool to avoid use-after-free of destroyed context in the handlers
+        /// 等待服务器池避免在处理程序中使用已销毁的上下文
         server_pool.joinAll();
 
         /** Explicitly destroy Context. It is more convenient than in destructor of Server, because logger is still available.
@@ -1288,73 +1360,88 @@ try
     });
 #endif
 
+    // 初始化 IO 线程池
     getIOThreadPool().initialize(
         server_settings[ServerSetting::max_io_thread_pool_size],
         server_settings[ServerSetting::max_io_thread_pool_free_size],
         server_settings[ServerSetting::io_thread_pool_queue_size]);
 
+    // 初始化备份 IO 线程池
     getBackupsIOThreadPool().initialize(
         server_settings[ServerSetting::max_backups_io_thread_pool_size],
         server_settings[ServerSetting::max_backups_io_thread_pool_free_size],
         server_settings[ServerSetting::backups_io_thread_pool_queue_size]);
 
+    // 初始化获取分区线程池
     getFetchPartitionThreadPool().initialize(
         server_settings[ServerSetting::max_fetch_partition_thread_pool_size],
         0, // FETCH PARTITION is relatively rare, no need to keep threads
         server_settings[ServerSetting::max_fetch_partition_thread_pool_size]);
 
+    // 初始化活动部分加载线程池
     getActivePartsLoadingThreadPool().initialize(
         server_settings[ServerSetting::max_active_parts_loading_thread_pool_size],
         0, // We don't need any threads once all the parts will be loaded
         server_settings[ServerSetting::max_active_parts_loading_thread_pool_size]);
 
+    // 初始化过时部分加载线程池
     getOutdatedPartsLoadingThreadPool().initialize(
         server_settings[ServerSetting::max_outdated_parts_loading_thread_pool_size],
         0, // We don't need any threads once all the parts will be loaded
         server_settings[ServerSetting::max_outdated_parts_loading_thread_pool_size]);
 
     /// It could grow if we need to synchronously wait until all the data parts will be loaded.
+    // 设置过时部分加载线程池的最大线程数
     getOutdatedPartsLoadingThreadPool().setMaxTurboThreads(
         server_settings[ServerSetting::max_active_parts_loading_thread_pool_size]
     );
 
+    // 初始化意外部分加载线程池
     getUnexpectedPartsLoadingThreadPool().initialize(
         server_settings[ServerSetting::max_unexpected_parts_loading_thread_pool_size],
         0, // We don't need any threads once all the parts will be loaded
         server_settings[ServerSetting::max_unexpected_parts_loading_thread_pool_size]);
 
     /// It could grow if we need to synchronously wait until all the data parts will be loaded.
+    // 设置意外部分加载线程池的最大线程数
     getUnexpectedPartsLoadingThreadPool().setMaxTurboThreads(
         server_settings[ServerSetting::max_active_parts_loading_thread_pool_size]
     );
 
+    // 初始化部分清理线程池
     getPartsCleaningThreadPool().initialize(
         server_settings[ServerSetting::max_parts_cleaning_thread_pool_size],
         0, // We don't need any threads one all the parts will be deleted
         server_settings[ServerSetting::max_parts_cleaning_thread_pool_size]);
 
+    // 获取数据库复制创建表线程池大小
     auto max_database_replicated_create_table_thread_pool_size = server_settings[ServerSetting::max_database_replicated_create_table_thread_pool_size]
         ? server_settings[ServerSetting::max_database_replicated_create_table_thread_pool_size]
         : getNumberOfCPUCoresToUse();
+    // 初始化数据库复制创建表线程池
     getDatabaseReplicatedCreateTablesThreadPool().initialize(
         max_database_replicated_create_table_thread_pool_size,
         0, // We don't need any threads once all the tables will be created
         max_database_replicated_create_table_thread_pool_size);
 
+    // 初始化数据库目录删除表线程池
     getDatabaseCatalogDropTablesThreadPool().initialize(
         server_settings[ServerSetting::database_catalog_drop_table_concurrency],
         0, // We don't need any threads if there are no DROP queries.
         server_settings[ServerSetting::database_catalog_drop_table_concurrency]);
 
+    // 初始化合并树前缀反序列化线程池
     getMergeTreePrefixesDeserializationThreadPool().initialize(
         server_settings[ServerSetting::max_prefixes_deserialization_thread_pool_size],
         server_settings[ServerSetting::max_prefixes_deserialization_thread_pool_free_size],
         server_settings[ServerSetting::prefixes_deserialization_thread_pool_thread_pool_queue_size]);
 
+    // 获取配置路径
     std::string path_str = getCanonicalPath(config().getString("path", DBMS_DEFAULT_PATH));
     fs::path path = path_str;
 
     /// Check that the process user id matches the owner of the data.
+    // 检查进程用户 ID 是否与数据所有者匹配
     assertProcessUserMatchesDataOwner(
         path_str,
         [&](const PreformattedMessage & message)
@@ -1369,11 +1456,14 @@ try
 
     ServerUUID::load(path / "uuid", log);
 
+    // 初始化放置信息
     PlacementInfo::PlacementInfo::instance().initialize(config());
 
+    // 验证 ZooKeeper 配置
     zkutil::validateZooKeeperConfig(config());
     bool has_zookeeper = zkutil::hasZooKeeperConfig(config());
 
+    // 创建 ZooKeeper 节点缓存
     zkutil::ZooKeeperNodeCache main_config_zk_node_cache([&] { return global_context->getZooKeeper(); });
     zkutil::EventPtr main_config_zk_changed_event = std::make_shared<Poco::Event>();
     if (loaded_config.has_zk_includes)
@@ -1388,14 +1478,18 @@ try
         global_context->setConfig(loaded_config.configuration);
     }
 
+    // 检查配置中是否有顶级设置名称
     Settings::checkNoSettingNamesAtTopLevel(config(), config_path);
 
     /// We need to reload server settings because config could be updated via zookeeper.
+    // 重新加载服务器设置，因为配置可能通过 ZooKeeper 更新。
     server_settings.loadSettingsFromConfig(config());
 
+    // 获取可执行文件路径
 #if defined(OS_LINUX)
     std::string executable_path = getExecutablePath();
 
+    // 获取可执行文件路径
     if (!executable_path.empty())
     {
         /// Integrity check based on checksum of the executable code.
@@ -1414,13 +1508,16 @@ try
         }
         else
         {
+            // 计算可执行文件的哈希值
             String calculated_binary_hash = getHashOfLoadedBinaryHex();
+            // 如果计算的哈希值与存储的哈希值相同，则记录日志
             if (calculated_binary_hash == stored_binary_hash)
             {
                 LOG_INFO(log, "Integrity check of the executable successfully passed (checksum: {})", calculated_binary_hash);
             }
             else
             {
+                // 如果计算的哈希值与存储的哈希值不同，则记录日志
                 /// If program is run under debugger, ptrace will fail.
                 if (ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) == -1)
                 {
@@ -1455,6 +1552,7 @@ try
 
     /// After full config loaded
     {
+        // 如果配置中 remap_executable 为 true，则重新映射可执行文件
         if (config().getBool("remap_executable", false))
         {
             LOG_DEBUG(log, "Will remap executable in memory.");
@@ -1462,6 +1560,7 @@ try
             LOG_DEBUG(log, "The code ({}) in memory has been successfully remapped.", ReadableSize(size));
         }
 
+        // 如果配置中 mlock_executable 为 true，则锁定可执行文件
         if (config().getBool("mlock_executable", false))
         {
             if (hasLinuxCapability(CAP_IPC_LOCK))
@@ -1516,6 +1615,7 @@ try
         setOOMScore(oom_score, log);
 #endif
 
+    // 设置取消任务
     std::unique_ptr<DB::BackgroundSchedulePoolTaskHolder> cancellation_task;
 
     SCOPE_EXIT({
@@ -1523,6 +1623,7 @@ try
             CancellationChecker::getInstance().terminateThread();
     });
 
+    // 如果后台计划池大小大于 1，则创建取消任务
     if (server_settings[ServerSetting::background_schedule_pool_size] > 1)
     {
         auto cancellation_task_holder = global_context->getSchedulePool().createTask(
@@ -1533,10 +1634,14 @@ try
         (*cancellation_task)->activateAndSchedule();
     }
 
+    // 设置远程主机过滤器
     global_context->setRemoteHostFilter(config());
+
+    // 设置 HTTP 头过滤器
     global_context->setHTTPHeaderFilter(config());
 
     /// Try to increase limit on number of open files.
+    // 尝试增加打开文件的限制
     {
         rlimit rlim;
         if (getrlimit(RLIMIT_NOFILE, &rlim))
@@ -1559,6 +1664,7 @@ try
     }
 
     /// Try to increase limit on number of threads.
+    // 尝试增加线程限制
     {
         rlimit rlim;
         if (getrlimit(RLIMIT_NPROC, &rlim))
@@ -1593,6 +1699,7 @@ try
         }
     }
 
+    // 设置错误处理
     static ServerErrorHandler error_handler;
     Poco::ErrorHandler::set(&error_handler);
 
@@ -1605,16 +1712,20 @@ try
         global_context->setMacros(std::make_unique<Macros>(config(), "macros", log));
 
     /// Storage with temporary data for processing of heavy queries.
+    // 设置临时数据存储策略
     if (!server_settings[ServerSetting::tmp_policy].value.empty())
     {
+        // 设置临时数据存储策略
         global_context->setTemporaryStoragePolicy(server_settings[ServerSetting::tmp_policy], server_settings[ServerSetting::max_temporary_data_on_disk_size]);
     }
     else if (!server_settings[ServerSetting::temporary_data_in_cache].value.empty())
     {
+        // 设置临时数据存储在缓存中
         global_context->setTemporaryStorageInCache(server_settings[ServerSetting::temporary_data_in_cache], server_settings[ServerSetting::max_temporary_data_on_disk_size]);
     }
     else
     {
+        // 设置临时数据存储路径
         std::string temporary_path = config().getString("tmp_path", path / "tmp/");
         global_context->setTemporaryStoragePath(temporary_path, server_settings[ServerSetting::max_temporary_data_on_disk_size]);
     }
@@ -1623,6 +1734,7 @@ try
       * Flags may be cleared automatically after being applied by the server.
       * Examples: do repair of local data; clone all replicated tables from replica.
       */
+    // 设置标志目录
     {
         auto flags_path = path / "flags/";
         fs::create_directories(flags_path);
@@ -1631,29 +1743,33 @@ try
 
     /** Directory with user provided files that are usable by 'file' table function.
       */
+    // 设置用户文件路径
     {
-
         std::string user_files_path = config().getString("user_files_path", path / "user_files/");
         global_context->setUserFilesPath(user_files_path);
         fs::create_directories(user_files_path);
     }
 
+    // 设置字典库路径
     {
         std::string dictionaries_lib_path = config().getString("dictionaries_lib_path", path / "dictionaries_lib/");
         global_context->setDictionariesLibPath(dictionaries_lib_path);
     }
 
+    // 设置用户脚本路径
     {
         std::string user_scripts_path = config().getString("user_scripts_path", path / "user_scripts/");
         global_context->setUserScriptsPath(user_scripts_path);
     }
 
     /// top_level_domains_lists
+    // 设置顶级域名列表路径
     {
         const std::string & top_level_domains_path = config().getString("top_level_domains_path", path / "top_level_domains/");
         TLDListsHolder::getInstance().parseConfig(fs::path(top_level_domains_path) / "", config());
     }
 
+    // 设置数据路径
     {
         fs::create_directories(path / "data");
         fs::create_directories(path / "metadata");
@@ -1662,15 +1778,18 @@ try
         fs::create_directories(path / "metadata_dropped");
     }
 
+    // 如果配置中同时存在 interserver_http_port 和 interserver_https_port，则抛出异常
     if (config().has("interserver_http_port") && config().has("interserver_https_port"))
         throw Exception(ErrorCodes::EXCESSIVE_ELEMENT_IN_CONFIG, "Both http and https interserver ports are specified");
 
+    // 设置 interserver 标签
     static const auto interserver_tags =
     {
         std::make_tuple("interserver_http_host", "interserver_http_port", "http"),
         std::make_tuple("interserver_https_host", "interserver_https_port", "https")
     };
 
+    // 遍历 interserver 标签
     for (auto [host_tag, port_tag, scheme] : interserver_tags)
     {
         if (config().has(port_tag))
@@ -1696,12 +1815,14 @@ try
     }
 
     LOG_DEBUG(log, "Initializing interserver credentials.");
+    // 更新 interserver 凭证
     global_context->updateInterserverCredentials(config());
 
     /// Set up caches.
-
+    // 设置缓存大小
     const size_t max_cache_size = static_cast<size_t>(physical_server_memory * server_settings[ServerSetting::cache_size_to_ram_max_ratio]);
 
+    // 设置未压缩缓存策略
     String uncompressed_cache_policy = server_settings[ServerSetting::uncompressed_cache_policy];
     size_t uncompressed_cache_size = server_settings[ServerSetting::uncompressed_cache_size];
     double uncompressed_cache_size_ratio = server_settings[ServerSetting::uncompressed_cache_size_ratio];
@@ -1712,6 +1833,7 @@ try
     }
     global_context->setUncompressedCache(uncompressed_cache_policy, uncompressed_cache_size, uncompressed_cache_size_ratio);
 
+    // 设置标记缓存策略
     String mark_cache_policy = server_settings[ServerSetting::mark_cache_policy];
     size_t mark_cache_size = server_settings[ServerSetting::mark_cache_size];
     double mark_cache_size_ratio = server_settings[ServerSetting::mark_cache_size_ratio];
@@ -1722,6 +1844,7 @@ try
     }
     global_context->setMarkCache(mark_cache_policy, mark_cache_size, mark_cache_size_ratio);
 
+    // 设置主索引缓存策略
     String primary_index_cache_policy = server_settings[ServerSetting::primary_index_cache_policy];
     size_t primary_index_cache_size = server_settings[ServerSetting::primary_index_cache_size];
     double primary_index_cache_size_ratio = server_settings[ServerSetting::primary_index_cache_size_ratio];
@@ -1732,6 +1855,7 @@ try
     }
     global_context->setPrimaryIndexCache(primary_index_cache_policy, primary_index_cache_size, primary_index_cache_size_ratio);
 
+    // 设置未压缩索引缓存策略
     String index_uncompressed_cache_policy = server_settings[ServerSetting::index_uncompressed_cache_policy];
     size_t index_uncompressed_cache_size = server_settings[ServerSetting::index_uncompressed_cache_size];
     double index_uncompressed_cache_size_ratio = server_settings[ServerSetting::index_uncompressed_cache_size_ratio];
@@ -1742,6 +1866,7 @@ try
     }
     global_context->setIndexUncompressedCache(index_uncompressed_cache_policy, index_uncompressed_cache_size, index_uncompressed_cache_size_ratio);
 
+    // 设置标记索引缓存策略
     String index_mark_cache_policy = server_settings[ServerSetting::index_mark_cache_policy];
     size_t index_mark_cache_size = server_settings[ServerSetting::index_mark_cache_size];
     double index_mark_cache_size_ratio = server_settings[ServerSetting::index_mark_cache_size_ratio];
@@ -1752,6 +1877,7 @@ try
     }
     global_context->setIndexMarkCache(index_mark_cache_policy, index_mark_cache_size, index_mark_cache_size_ratio);
 
+    // 设置向量相似索引缓存策略
     String vector_similarity_index_cache_policy = server_settings[ServerSetting::vector_similarity_index_cache_policy];
     size_t vector_similarity_index_cache_size = server_settings[ServerSetting::vector_similarity_index_cache_size];
     size_t vector_similarity_index_cache_max_entries = server_settings[ServerSetting::vector_similarity_index_cache_max_entries];
@@ -1763,6 +1889,7 @@ try
     }
     global_context->setVectorSimilarityIndexCache(vector_similarity_index_cache_policy, vector_similarity_index_cache_size, vector_similarity_index_cache_max_entries, vector_similarity_index_cache_size_ratio);
 
+    // 设置 mmap 缓存策略
     size_t mmap_cache_size = server_settings[ServerSetting::mmap_cache_size];
     if (mmap_cache_size > max_cache_size)
     {
@@ -1771,6 +1898,7 @@ try
     }
     global_context->setMMappedFileCache(mmap_cache_size);
 
+    // 设置 iceberg 元数据文件缓存策略
 #if USE_AVRO
     String iceberg_metadata_files_cache_policy = server_settings[ServerSetting::iceberg_metadata_files_cache_policy];
     size_t iceberg_metadata_files_cache_size = server_settings[ServerSetting::iceberg_metadata_files_cache_size];
@@ -1784,6 +1912,7 @@ try
     global_context->setIcebergMetadataFilesCache(iceberg_metadata_files_cache_policy, iceberg_metadata_files_cache_size, iceberg_metadata_files_cache_max_entries, iceberg_metadata_files_cache_size_ratio);
 #endif
 
+    // 设置查询条件缓存策略
     String query_condition_cache_policy = server_settings[ServerSetting::query_condition_cache_policy];
     size_t query_condition_cache_size = server_settings[ServerSetting::query_condition_cache_size];
     double query_condition_cache_size_ratio = server_settings[ServerSetting::query_condition_cache_size_ratio];
@@ -1794,6 +1923,7 @@ try
     }
     global_context->setQueryConditionCache(query_condition_cache_policy, query_condition_cache_size, query_condition_cache_size_ratio);
 
+    // 设置查询结果缓存策略
     size_t query_result_cache_max_size_in_bytes = config().getUInt64("query_cache.max_size_in_bytes", DEFAULT_QUERY_RESULT_CACHE_MAX_SIZE);
     size_t query_result_cache_max_entries = config().getUInt64("query_cache.max_entries", DEFAULT_QUERY_RESULT_CACHE_MAX_ENTRIES);
     size_t query_result_cache_max_entry_size_in_bytes = config().getUInt64("query_cache.max_entry_size_in_bytes", DEFAULT_QUERY_RESULT_CACHE_MAX_ENTRY_SIZE_IN_BYTES);
@@ -1806,23 +1936,29 @@ try
     global_context->setQueryResultCache(query_result_cache_max_size_in_bytes, query_result_cache_max_entries, query_result_cache_max_entry_size_in_bytes, query_result_cache_max_entry_size_in_rows);
 
 #if USE_EMBEDDED_COMPILER
+    // 设置编译表达式缓存策略
     size_t compiled_expression_cache_max_size_in_bytes = server_settings[ServerSetting::compiled_expression_cache_size];
     size_t compiled_expression_cache_max_elements = server_settings[ServerSetting::compiled_expression_cache_elements_size];
     CompiledExpressionCacheFactory::instance().init(compiled_expression_cache_max_size_in_bytes, compiled_expression_cache_max_elements);
 #endif
 
+    // 加载命名集合
     NamedCollectionFactory::instance().loadIfNot();
 
+    // 加载默认缓存
     FileCacheFactory::instance().loadDefaultCaches(config());
 
     /// Initialize main config reloader.
+    // 初始化主配置重载器
     std::string include_from_path = config().getString("include_from", "/etc/metrika.xml");
 
+    // 设置查询掩码规则
     if (config().has("query_masking_rules"))
     {
         SensitiveDataMasker::setInstance(std::make_unique<SensitiveDataMasker>(config(), "query_masking_rules"));
     }
 
+    // 设置 cgroups 内存使用观察器
     std::optional<CgroupsMemoryUsageObserver> cgroups_memory_usage_observer;
     try
     {
@@ -1835,15 +1971,19 @@ try
         tryLogCurrentException(log, "Disabling cgroup memory observer because of an error during initialization");
     }
 
+    // 设置证书路径
     std::string cert_path = config().getString("openSSL.server.certificateFile", "");
     std::string key_path = config().getString("openSSL.server.privateKeyFile", "");
 
+    // 设置额外路径
     std::vector<std::string> extra_paths = {include_from_path};
     if (!cert_path.empty())
         extra_paths.emplace_back(cert_path);
+
     if (!key_path.empty())
         extra_paths.emplace_back(key_path);
 
+    // 设置协议路径
     Poco::Util::AbstractConfiguration::Keys protocols;
     config().keys("protocols", protocols);
     for (const auto & protocol : protocols)
@@ -1856,6 +1996,7 @@ try
             extra_paths.emplace_back(key_path);
     }
 
+    // 设置主配置重载器
     auto main_config_reloader = std::make_unique<ConfigReloader>(
         config_path,
         extra_paths,
@@ -1864,16 +2005,19 @@ try
         main_config_zk_changed_event,
         [&](ConfigurationPtr config, bool initial_loading)
         {
+            // 检查配置中是否有顶级设置名称
             Settings::checkNoSettingNamesAtTopLevel(*config, config_path);
 
             ServerSettings new_server_settings;
             new_server_settings.loadSettingsFromConfig(*config);
 
+            // 设置最大服务器内存使用量
             size_t max_server_memory_usage = new_server_settings[ServerSetting::max_server_memory_usage];
             const double max_server_memory_usage_to_ram_ratio = new_server_settings[ServerSetting::max_server_memory_usage_to_ram_ratio];
             const size_t current_physical_server_memory = getMemoryAmount(); /// With cgroups, the amount of memory available to the server can be changed dynamically.
             const size_t default_max_server_memory_usage = static_cast<size_t>(current_physical_server_memory * max_server_memory_usage_to_ram_ratio);
 
+            // 如果最大服务器内存使用量为 0，则设置为默认值
             if (max_server_memory_usage == 0)
             {
                 max_server_memory_usage = default_max_server_memory_usage;
@@ -1883,6 +2027,7 @@ try
                     formatReadableSizeWithBinarySuffix(current_physical_server_memory),
                     max_server_memory_usage_to_ram_ratio);
             }
+            // 如果最大服务器内存使用量大于默认值，则设置为默认值
             else if (max_server_memory_usage > default_max_server_memory_usage)
             {
                 max_server_memory_usage = default_max_server_memory_usage;
@@ -1894,15 +2039,20 @@ try
                     max_server_memory_usage_to_ram_ratio);
             }
 
+            // 设置总内存使用量
             total_memory_tracker.setHardLimit(max_server_memory_usage);
             total_memory_tracker.setDescription("(total)");
             total_memory_tracker.setMetric(CurrentMetrics::MemoryTracking);
 
+            // 设置合并和突变内存使用软限制
             size_t merges_mutations_memory_usage_soft_limit = new_server_settings[ServerSetting::merges_mutations_memory_usage_soft_limit];
 
+            // 设置默认合并和突变内存使用软限制
             size_t default_merges_mutations_server_memory_usage = static_cast<size_t>(current_physical_server_memory * new_server_settings[ServerSetting::merges_mutations_memory_usage_to_ram_ratio]);
+            // 如果合并和突变内存使用软限制为 0，则设置为默认值
             if (merges_mutations_memory_usage_soft_limit == 0)
             {
+                // 设置合并和突变内存使用软限制为默认值
                 merges_mutations_memory_usage_soft_limit = default_merges_mutations_server_memory_usage;
                 LOG_INFO(log, "Setting merges_mutations_memory_usage_soft_limit was set to {}"
                     " ({} available * {:.2f} merges_mutations_memory_usage_to_ram_ratio)",
@@ -1926,6 +2076,7 @@ try
             background_memory_tracker.setDescription("(background)");
             background_memory_tracker.setMetric(CurrentMetrics::MergesMutationsMemoryTracking);
 
+            // 设置全局超额提交跟踪器
             auto * global_overcommit_tracker = global_context->getGlobalOvercommitTracker();
             total_memory_tracker.setOvercommitTracker(global_overcommit_tracker);
 
@@ -1939,6 +2090,7 @@ try
 
             global_context->setDashboardsConfig(config);
 
+            // 如果服务器完全启动，则加载或重新加载字典和用户定义的可执行函数
             if (global_context->isServerCompletelyStarted())
             {
                 /// It does not make sense to reload anything before server has started.
@@ -1947,6 +2099,7 @@ try
                 global_context->loadOrReloadUserDefinedExecutableFunctions(*config);
             }
 
+            // 设置远程主机过滤器
             global_context->setRemoteHostFilter(*config);
             global_context->setHTTPHeaderFilter(*config);
 
@@ -1961,9 +2114,12 @@ try
             global_context->setMaxPendingMutationsExecutionTimeToWarn(new_server_settings[ServerSetting::max_pending_mutations_execution_time_to_warn]);
             global_context->getAccessControl().setAllowTierSettings(new_server_settings[ServerSetting::allow_feature_tier]);
 
+            // 设置最大远程读取网络带宽
             size_t read_bandwidth = new_server_settings[ServerSetting::max_remote_read_network_bandwidth_for_server];
+            // 设置最大远程写入网络带宽
             size_t write_bandwidth = new_server_settings[ServerSetting::max_remote_write_network_bandwidth_for_server];
 
+            // 重新加载远程限速器配置
             global_context->reloadRemoteThrottlerConfig(read_bandwidth,write_bandwidth);
             LOG_INFO(log, "Setting max_remote_read_network_bandwidth_for_server was set to {}", read_bandwidth);
             LOG_INFO(log, "Setting max_remote_write_network_bandwidth_for_server was set to {}", write_bandwidth);
@@ -1979,11 +2135,13 @@ try
                 concurrent_threads_soft_limit == UnlimitedSlots ? std::string("UNLIMITED") : std::to_string(concurrent_threads_soft_limit),
                 concurrency_control_scheduler);
 
+            // 设置最大并发查询数
             global_context->getProcessList().setMaxSize(new_server_settings[ServerSetting::max_concurrent_queries]);
             global_context->getProcessList().setMaxInsertQueriesAmount(new_server_settings[ServerSetting::max_concurrent_insert_queries]);
             global_context->getProcessList().setMaxSelectQueriesAmount(new_server_settings[ServerSetting::max_concurrent_select_queries]);
             global_context->getProcessList().setMaxWaitingQueriesAmount(new_server_settings[ServerSetting::max_waiting_queries]);
 
+            // 如果配置中包含 keeper_server，则更新 Keeper 配置
             if (config->has("keeper_server"))
                 global_context->updateKeeperConfiguration(*config);
 
@@ -1991,6 +2149,7 @@ try
             /// Note: If you specified it in the top level config (not it config of default profile)
             /// then ClickHouse will use it exactly.
             /// This is done for backward compatibility.
+            // 如果后台执行器已初始化，则设置合并和突变线程数
             if (global_context->areBackgroundExecutorsInitialized())
             {
                 auto new_pool_size = new_server_settings[ServerSetting::background_pool_size];
@@ -1999,48 +2158,62 @@ try
                 global_context->getMergeMutateExecutor()->updateSchedulingPolicy(new_server_settings[ServerSetting::background_merges_mutations_scheduling_policy].toString());
             }
 
+            // 如果后台执行器已初始化，则设置移动线程数
             if (global_context->areBackgroundExecutorsInitialized())
             {
                 auto new_pool_size = new_server_settings[ServerSetting::background_move_pool_size];
                 global_context->getMovesExecutor()->increaseThreadsAndMaxTasksCount(new_pool_size, new_pool_size);
             }
 
+            // 如果后台执行器已初始化，则设置获取线程数
             if (global_context->areBackgroundExecutorsInitialized())
             {
                 auto new_pool_size = new_server_settings[ServerSetting::background_fetches_pool_size];
                 global_context->getFetchesExecutor()->increaseThreadsAndMaxTasksCount(new_pool_size, new_pool_size);
             }
 
+            // 如果后台执行器已初始化，则设置通用线程数
             if (global_context->areBackgroundExecutorsInitialized())
             {
                 auto new_pool_size = new_server_settings[ServerSetting::background_common_pool_size];
                 global_context->getCommonExecutor()->increaseThreadsAndMaxTasksCount(new_pool_size, new_pool_size);
             }
 
+            // 增加缓冲区刷新调度池线程数
             global_context->getBufferFlushSchedulePool().increaseThreadsCount(new_server_settings[ServerSetting::background_buffer_flush_schedule_pool_size]);
+            // 增加调度池线程数
             global_context->getSchedulePool().increaseThreadsCount(new_server_settings[ServerSetting::background_schedule_pool_size]);
+            // 增加消息代理调度池线程数
             global_context->getMessageBrokerSchedulePool().increaseThreadsCount(new_server_settings[ServerSetting::background_message_broker_schedule_pool_size]);
+            // 增加分布式调度池线程数
             global_context->getDistributedSchedulePool().increaseThreadsCount(new_server_settings[ServerSetting::background_distributed_schedule_pool_size]);
 
+            // 设置表加载池线程数
             global_context->getAsyncLoader().setMaxThreads(TablesLoaderForegroundPoolId, new_server_settings[ServerSetting::tables_loader_foreground_pool_size]);
+            // 设置表加载池线程数
             global_context->getAsyncLoader().setMaxThreads(TablesLoaderBackgroundLoadPoolId, new_server_settings[ServerSetting::tables_loader_background_pool_size]);
+            // 设置表加载池线程数
             global_context->getAsyncLoader().setMaxThreads(TablesLoaderBackgroundStartupPoolId, new_server_settings[ServerSetting::tables_loader_background_pool_size]);
 
+            // 设置 IO 线程池线程数
             getIOThreadPool().reloadConfiguration(
                 new_server_settings[ServerSetting::max_io_thread_pool_size],
                 new_server_settings[ServerSetting::max_io_thread_pool_free_size],
                 new_server_settings[ServerSetting::io_thread_pool_queue_size]);
 
+            // 设置备份 IO 线程池线程数
             getBackupsIOThreadPool().reloadConfiguration(
                 new_server_settings[ServerSetting::max_backups_io_thread_pool_size],
                 new_server_settings[ServerSetting::max_backups_io_thread_pool_free_size],
                 new_server_settings[ServerSetting::backups_io_thread_pool_queue_size]);
 
+            // 设置分区加载线程池线程数
             getFetchPartitionThreadPool().reloadConfiguration(
                 new_server_settings[ServerSetting::max_fetch_partition_thread_pool_size],
                 0, // FETCH PARTITION is relatively rare, no need to keep threads
                 new_server_settings[ServerSetting::max_fetch_partition_thread_pool_size]);
 
+            // 设置分区加载线程池线程数
             getActivePartsLoadingThreadPool().reloadConfiguration(
                 new_server_settings[ServerSetting::max_active_parts_loading_thread_pool_size],
                 0, // We don't need any threads once all the parts will be loaded
@@ -2056,11 +2229,13 @@ try
                 new_server_settings[ServerSetting::max_active_parts_loading_thread_pool_size]
             );
 
+            // 设置分区清理线程池线程数
             getPartsCleaningThreadPool().reloadConfiguration(
                 new_server_settings[ServerSetting::max_parts_cleaning_thread_pool_size],
                 0, // We don't need any threads one all the parts will be deleted
                 new_server_settings[ServerSetting::max_parts_cleaning_thread_pool_size]);
 
+            // 设置合并树前缀反序列化线程池线程数
             getMergeTreePrefixesDeserializationThreadPool().reloadConfiguration(
                 new_server_settings[ServerSetting::max_prefixes_deserialization_thread_pool_size],
                 new_server_settings[ServerSetting::max_prefixes_deserialization_thread_pool_free_size],
@@ -2070,11 +2245,13 @@ try
             global_context->setMutationWorkload(new_server_settings[ServerSetting::mutation_workload]);
             global_context->setThrowOnUnknownWorkload(new_server_settings[ServerSetting::throw_on_unknown_workload]);
 
+            // 如果配置中包含 resources，则更新资源管理器配置
             if (config->has("resources"))
             {
                 global_context->getResourceManager()->updateConfiguration(*config);
             }
 
+            // 如果配置未初始化，则重新加载 ZooKeeper 配置
             if (!initial_loading)
             {
                 /// We do not load ZooKeeper configuration on the first config loading
@@ -2093,27 +2270,39 @@ try
                 }
             }
 
+            // 更新存储配置
             global_context->updateStorageConfiguration(*config);
+            // 更新 interserver 凭证
             global_context->updateInterserverCredentials(*config);
-
+            // 更新未压缩缓存配置
             global_context->updateUncompressedCacheConfiguration(*config);
+            // 更新标记缓存配置
             global_context->updateMarkCacheConfiguration(*config);
+            // 更新主索引缓存配置
             global_context->updatePrimaryIndexCacheConfiguration(*config);
+            // 更新未压缩索引缓存配置
             global_context->updateIndexUncompressedCacheConfiguration(*config);
+            // 更新标记索引缓存配置
             global_context->updateIndexMarkCacheConfiguration(*config);
+            // 更新向量相似索引缓存配置
             global_context->updateVectorSimilarityIndexCacheConfiguration(*config);
+            // 更新 mmap 缓存配置
             global_context->updateMMappedFileCacheConfiguration(*config);
+            // 更新查询结果缓存配置
             global_context->updateQueryResultCacheConfiguration(*config);
+            // 更新查询条件缓存配置
             global_context->updateQueryConditionCacheConfiguration(*config);
 
             CompressionCodecEncrypted::Configuration::instance().tryLoad(*config, "encryption_codecs");
 #if USE_SSL
             CertificateReloader::instance().tryReloadAll(*config);
 #endif
+            // 重新加载命名集合工厂
             NamedCollectionFactory::instance().reloadFromConfig(*config);
-
+            // 更新文件缓存工厂设置
             FileCacheFactory::instance().updateSettingsFromConfig(*config);
 
+            // 设置 HTTP 连接池限制
             HTTPConnectionPools::instance().setLimits(
                 HTTPConnectionPools::Limits{
                     new_server_settings[ServerSetting::disk_connections_soft_limit],
@@ -2131,6 +2320,7 @@ try
                     new_server_settings[ServerSetting::http_connections_store_limit],
                 });
 
+            // 设置 DNS 过滤设置
             DNSResolver::instance().setFilterSettings(new_server_settings[ServerSetting::dns_allow_resolve_names_to_ipv4], new_server_settings[ServerSetting::dns_allow_resolve_names_to_ipv6]);
 
             if (global_context->isServerCompletelyStarted())
@@ -2142,10 +2332,14 @@ try
             latest_config = config;
         });
 
+    // 获取监听主机 
     const auto listen_hosts = getListenHosts(config());
+    // 获取 interserver 监听主机
     const auto interserver_listen_hosts = getInterserverListenHosts(config());
+    // 获取监听尝试
     const auto listen_try = getListenTry(config());
 
+    // 如果配置了 keeper_server.server_id
     if (config().has("keeper_server.server_id"))
     {
 #if USE_NURAFT
@@ -2153,14 +2347,18 @@ try
         //// of clickhouse-keeper, so start synchronously.
         bool can_initialize_keeper_async = false;
 
+        // 如果配置了 zookeeper
         if (has_zookeeper) /// We have configured connection to some zookeeper cluster
         {
             /// If we cannot connect to some other node from our cluster then we have to wait our Keeper start
             /// synchronously.
             can_initialize_keeper_async = global_context->tryCheckClientConnectionToMyKeeperCluster();
         }
+
         /// Initialize keeper RAFT.
+        // 初始化 keeper 调度器 
         global_context->initializeKeeperDispatcher(can_initialize_keeper_async);
+        // 注册四字母命令
         FourLetterCommandFactory::registerCommands(*global_context->getKeeperDispatcher());
 
         auto config_getter = [this] () -> const Poco::Util::AbstractConfiguration &
@@ -2168,10 +2366,12 @@ try
             return global_context->getConfigRef();
         };
 
+        // 遍历监听主机
         for (const auto & listen_host : listen_hosts)
         {
             /// TCP Keeper
             const char * port_name = "keeper_server.tcp_port";
+            // 创建 keeper 服务器
             createServer(
                 config(), listen_host, port_name, listen_try, /* start_server: */ false,
                 servers_to_start_before_tables,
@@ -2197,6 +2397,7 @@ try
                 });
 
             const char * secure_port_name = "keeper_server.tcp_port_secure";
+
             createServer(
                 config(), listen_host, secure_port_name, listen_try, /* start_server: */ false,
                 servers_to_start_before_tables,
@@ -2232,12 +2433,14 @@ try
             servers_to_start_before_tables,
             [&](UInt16 port) -> ProtocolServerAdapter
             {
+                // 获取 HTTP 上下文
                 auto http_context = httpContext();
                 Poco::Timespan keep_alive_timeout(config().getUInt("keep_alive_timeout", 10), 0);
                 Poco::Net::HTTPServerParams::Ptr http_params = new Poco::Net::HTTPServerParams;
                 http_params->setTimeout(http_context->getReceiveTimeout());
                 http_params->setKeepAliveTimeout(keep_alive_timeout);
 
+                // 创建服务器套接字
                 Poco::Net::ServerSocket socket;
                 auto address = socketBindListen(config(), socket, listen_host, port);
                 socket.setReceiveTimeout(http_context->getReceiveTimeout());
@@ -2261,6 +2464,7 @@ try
     }
 
     {
+        // 
         std::lock_guard lock(servers_lock);
         /// We should start interserver communications before (and more important shutdown after) tables.
         /// Because server can wait for a long-running queries (for example in tcp_handler) after interserver handler was already shut down.
@@ -2284,6 +2488,7 @@ try
     }
 
     /// Initialize access storages.
+    // 初始化访问控制
     auto & access_control = global_context->getAccessControl();
     try
     {
@@ -2295,6 +2500,7 @@ try
         throw;
     }
 
+    // 如果 cgroups 内存使用观察器已初始化，则设置回调函数
     if (cgroups_memory_usage_observer)
     {
         cgroups_memory_usage_observer->setOnMemoryAmountAvailableChangedFn([&]() { main_config_reloader->reload(); });
@@ -2374,7 +2580,9 @@ try
         global_context->getMergeTreeSettings().sanityCheck(background_pool_tasks, allowed_experimental, allowed_beta);
         global_context->getReplicatedMergeTreeSettings().sanityCheck(background_pool_tasks, allowed_experimental, allowed_beta);
     }
+
     /// try set up encryption. There are some errors in config, error will be printed and server wouldn't start.
+    /// 尝试加载加密配置。如果配置中存在错误，则打印错误并服务器不会启动。
     CompressionCodecEncrypted::Configuration::instance().load(config(), "encryption_codecs");
 
     /// DNSCacheUpdater uses BackgroundSchedulePool which lives in shared context
@@ -2430,6 +2638,8 @@ try
         /// (In particular things would break if a background drop query happens before the
         /// loadMarkedAsDroppedTables() call below - it'll see dropped table metadata and try to
         /// drop the table a second time and throw an exception.)
+        /// 在加载表之前，不要运行后台查询。
+        /// （特别是如果后台删除查询发生在 loadMarkedAsDroppedTables() 调用之前，它将看到已删除的表元数据并尝试再次删除表，这将抛出异常。）
         global_context->getRefreshSet().setRefreshesStopped(true);
 
         auto & database_catalog = DatabaseCatalog::instance();
@@ -2445,8 +2655,10 @@ try
         /// After attaching system databases we can initialize system log.
         global_context->initializeSystemLogs();
         global_context->setSystemZooKeeperLogAfterInitializationIfNeeded();
+
         /// Build loggers before tables startup to make log messages from tables
         /// attach available in system.text_log
+        /// 在表启动之前构建日志记录器，以便系统日志记录可用。
         buildLoggers(config(), logger());
         initializeAzureSDKLogger(server_settings, logger().getLevel());
         /// After the system database is created, attach virtual system tables (in addition to query_log and part_log)
@@ -2538,10 +2750,12 @@ try
 #endif
 
     {
+        /// 异步加载系统表
         attachSystemTablesAsync(global_context, *DatabaseCatalog::instance().getSystemDatabase(), async_metrics);
 
         {
             std::lock_guard lock(servers_lock);
+            // 创建服务器
             createServers(config(), listen_hosts, listen_try, server_pool, async_metrics, servers);
             if (servers.empty())
                 throw Exception(ErrorCodes::NO_ELEMENTS_IN_CONFIG,
@@ -2549,6 +2763,7 @@ try
                                 "to configuration file.)");
         }
 
+        // 如果服务器为空，则抛出异常
         if (servers.empty())
              throw Exception(ErrorCodes::NO_ELEMENTS_IN_CONFIG,
                              "No servers started (add valid listen_host and 'tcp_port' or 'http_port' "
@@ -2560,13 +2775,16 @@ try
 #endif
 
         /// Must be done after initialization of `servers`, because async_metrics will access `servers` variable from its thread.
+        // 必须在服务器初始化之后完成，因为 async_metrics 会从其线程访问 `servers` 变量。
         async_metrics.start();
         global_context->setAsynchronousMetrics(&async_metrics);
 
+        // 启动主配置重载器
         main_config_reloader->start();
         access_control.startPeriodicReloading();
 
         /// try to load dictionaries immediately, throw on error and die
+        // 尝试立即加载字典，如果出现错误则抛出异常并退出
         try
         {
             global_context->loadOrReloadDictionaries(config());
@@ -2581,6 +2799,7 @@ try
         }
 
         /// try to load embedded dictionaries immediately, throw on error and die
+        // 尝试立即加载嵌入式字典，如果出现错误则抛出异常并退出
         try
         {
             global_context->tryCreateEmbeddedDictionaries();
@@ -2592,6 +2811,7 @@ try
         }
 
         /// try to load user defined executable functions, throw on error and die
+        // 尝试立即加载用户定义的可执行函数，如果出现错误则抛出异常并退出
         try
         {
             global_context->loadOrReloadUserDefinedExecutableFunctions(config());
@@ -2602,6 +2822,7 @@ try
             throw;
         }
 
+        // 如果配置中包含分布式 DDL，则设置 DDL 工作器
         if (has_zookeeper && config().has("distributed_ddl"))
         {
             /// DDL worker should be started after all tables were loaded
@@ -2769,6 +2990,7 @@ std::unique_ptr<TCPProtocolStackFactory> Server::buildProtocolStackFromConfig(
     AsynchronousMetrics & async_metrics,
     bool & is_secure)
 {
+    // 创建工厂函数
     auto create_factory = [&](const std::string & type, const std::string & conf_name) -> TCPServerConnectionFactory::Ptr
     {
         if (type == "tcp")
@@ -2783,8 +3005,10 @@ std::unique_ptr<TCPProtocolStackFactory> Server::buildProtocolStackFromConfig(
 
         if (type == "proxy1")
             return TCPServerConnectionFactory::Ptr(new ProxyV1HandlerFactory(*this, conf_name));
+
         if (type == "mysql")
             return TCPServerConnectionFactory::Ptr(new MySQLHandlerFactory(*this, ProfileEvents::InterfaceMySQLReceiveBytes, ProfileEvents::InterfaceMySQLSendBytes));
+
         if (type == "postgres")
 #if USE_SSL
             return TCPServerConnectionFactory::Ptr(new PostgreSQLHandlerFactory(*this, conf_name + ".", ProfileEvents::InterfacePostgreSQLReceiveBytes, ProfileEvents::InterfacePostgreSQLSendBytes));
@@ -2847,6 +3071,7 @@ HTTPContextPtr Server::httpContext() const
     return std::make_shared<HTTPContext>(context());
 }
 
+// 创建服务器
 void Server::createServers(
     Poco::Util::AbstractConfiguration & config,
     const Strings & listen_hosts,
@@ -2857,16 +3082,19 @@ void Server::createServers(
     bool start_servers,
     const ServerType & server_type)
 {
+    // 获取设置
     const Settings & settings = global_context->getSettingsRef();
-
+    // 创建 http 服务器参数
     Poco::Net::HTTPServerParams::Ptr http_params = new Poco::Net::HTTPServerParams;
     http_params->setTimeout(settings[Setting::http_receive_timeout]);
     http_params->setKeepAliveTimeout(global_context->getServerSettings()[ServerSetting::keep_alive_timeout]);
     http_params->setMaxKeepAliveRequests(static_cast<int>(global_context->getServerSettings()[ServerSetting::max_keep_alive_requests]));
 
+    // 获取协议
     Poco::Util::AbstractConfiguration::Keys protocols;
     config.keys("protocols", protocols);
 
+    // 创建连接过滤器
     const TCPServerConnectionFilter::Ptr & connection_filter = new TCPServerConnectionFilter{[&]()
     {
         const auto & server_settings = global_context->getServerSettings();
@@ -2876,8 +3104,10 @@ void Server::createServers(
                 /*should_throw*/ false);
     }};
 
+    // 遍历协议
     for (const auto & protocol : protocols)
     {
+        // 如果协议不应该启动
         if (!server_type.shouldStart(ServerType::Type::CUSTOM, protocol))
             continue;
 
@@ -2904,6 +3134,7 @@ void Server::createServers(
             if (stack->empty())
                 throw Exception(ErrorCodes::INVALID_CONFIG_PARAMETER, "Protocol '{}' stack empty", protocol);
 
+            // 创建服务器
             createServer(config, host, port_name.c_str(), listen_try, start_servers, servers, [&](UInt16 port) -> ProtocolServerAdapter
             {
                 Poco::Net::ServerSocket socket;
@@ -2929,10 +3160,12 @@ void Server::createServers(
     {
         const char * port_name;
 
+        // 如果应该启动 http 服务器
         if (server_type.shouldStart(ServerType::Type::HTTP))
         {
             /// HTTP
             port_name = "http_port";
+            // 创建 http 服务器
             createServer(config, listen_host, port_name, listen_try, start_servers, servers, [&](UInt16 port) -> ProtocolServerAdapter
             {
                 Poco::Net::ServerSocket socket;
@@ -2956,7 +3189,9 @@ void Server::createServers(
             createServer(config, listen_host, port_name, listen_try, start_servers, servers, [&](UInt16 port) -> ProtocolServerAdapter
             {
 #if USE_SSL
+                // 创建安全服务器套接字
                 Poco::Net::SecureServerSocket socket;
+                // 绑定并监听
                 auto address = socketBindListen(config, socket, listen_host, port, /* secure = */ true);
                 socket.setReceiveTimeout(settings[Setting::http_receive_timeout]);
                 socket.setSendTimeout(settings[Setting::http_send_timeout]);
@@ -3019,6 +3254,7 @@ void Server::createServers(
             });
         }
 
+        // 如果应该启动安全 TCP 服务器
         if (server_type.shouldStart(ServerType::Type::TCP_SECURE))
         {
             /// TCP with SSL
@@ -3047,6 +3283,7 @@ void Server::createServers(
             });
         }
 
+        // 如果应该启动 SSH 服务器
         if (server_type.shouldStart(ServerType::Type::TCP_SSH))
         {
             port_name = "tcp_ssh_port";
@@ -3153,6 +3390,7 @@ void Server::createServers(
     }
 }
 
+// 创建内部服务器
 void Server::createInterserverServers(
     Poco::Util::AbstractConfiguration & config,
     const Strings & interserver_listen_hosts,
@@ -3165,6 +3403,7 @@ void Server::createInterserverServers(
 {
     const Settings & settings = global_context->getSettingsRef();
 
+    // 创建 HTTP 服务器参数
     Poco::Net::HTTPServerParams::Ptr http_params = new Poco::Net::HTTPServerParams;
     http_params->setTimeout(settings[Setting::http_receive_timeout]);
     http_params->setKeepAliveTimeout(global_context->getServerSettings()[ServerSetting::keep_alive_timeout]);
@@ -3174,6 +3413,7 @@ void Server::createInterserverServers(
     {
         const char * port_name;
 
+        // 如果应该启动内部服务器 HTTP
         if (server_type.shouldStart(ServerType::Type::INTERSERVER_HTTP))
         {
             /// Interserver IO HTTP
@@ -3200,6 +3440,7 @@ void Server::createInterserverServers(
             });
         }
 
+        // 如果应该启动内部服务器 HTTPS
         if (server_type.shouldStart(ServerType::Type::INTERSERVER_HTTPS))
         {
             port_name = "interserver_https_port";
@@ -3232,6 +3473,7 @@ void Server::createInterserverServers(
     }
 }
 
+// 停止服务器
 void Server::stopServers(
     std::vector<ProtocolServerAdapter> & servers,
     const ServerType & server_type) const
@@ -3239,6 +3481,7 @@ void Server::stopServers(
     LoggerRawPtr log = &logger();
 
     /// Remove servers once all their connections are closed
+    // 检查服务器是否已经停止
     auto check_server = [&log](const char prefix[], auto & server)
     {
         if (!server.isStopping())
@@ -3252,8 +3495,10 @@ void Server::stopServers(
         return !current_connections;
     };
 
+    // 从 servers 中删除已经停止的服务器
     std::erase_if(servers, std::bind_front(check_server, " (from one of previous remove)"));
 
+    // 停止服务器
     for (auto & server : servers)
     {
         if (!server.isStopping())
@@ -3265,6 +3510,7 @@ void Server::stopServers(
         }
     }
 
+    // 从 servers 中删除已经停止的服务器
     std::erase_if(servers, std::bind_front(check_server, ""));
 }
 
@@ -3277,11 +3523,13 @@ void Server::updateServers(
 {
     LoggerRawPtr log = &logger();
 
+    // 获取监听主机
     const auto listen_hosts = getListenHosts(config);
     const auto interserver_listen_hosts = getInterserverListenHosts(config);
     const auto listen_try = getListenTry(config);
 
     /// Remove servers once all their connections are closed
+    // 检查服务器是否已经停止
     auto check_server = [&log](const char prefix[], auto & server)
     {
         if (!server.isStopping())
@@ -3295,20 +3543,25 @@ void Server::updateServers(
         return !current_connections;
     };
 
+    // 从 servers 中删除已经停止的服务器
     std::erase_if(servers, std::bind_front(check_server, " (from one of previous reload)"));
 
+    // 获取配置
     Poco::Util::AbstractConfiguration & previous_config = latest_config ? *latest_config : this->config();
 
+    // 创建服务器
     std::vector<ProtocolServerAdapter *> all_servers;
     all_servers.reserve(servers.size() + servers_to_start_before_tables.size());
     for (auto & server : servers)
         all_servers.push_back(&server);
 
+    // 创建服务器
     for (auto & server : servers_to_start_before_tables)
         all_servers.push_back(&server);
 
     for (auto * server : all_servers)
     {
+        // 检查服务器是否支持运行时重新配置
         if (server->supportsRuntimeReconfiguration() && !server->isStopping())
         {
             std::string port_name = server->getPortName();
@@ -3354,6 +3607,8 @@ void Server::updateServers(
 
             if (!has_host)
                 has_host = std::find(listen_hosts.begin(), listen_hosts.end(), server->getListenHost()) != listen_hosts.end();
+
+            // 检查端口是否存在
             bool has_port = !config.getString(port_name, "").empty();
             bool force_restart = is_http && !isSameConfiguration(previous_config, config, "http_handlers");
             if (force_restart)
@@ -3367,7 +3622,10 @@ void Server::updateServers(
         }
     }
 
+    // 创建服务器
     createServers(config, listen_hosts, listen_try, server_pool, async_metrics, servers, /* start_servers= */ true);
+
+    // 创建内部服务器
     createInterserverServers(config, interserver_listen_hosts, listen_try, server_pool, async_metrics, servers_to_start_before_tables, /* start_servers= */ true);
 
     std::erase_if(servers, std::bind_front(check_server, ""));

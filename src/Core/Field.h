@@ -26,6 +26,10 @@ using FieldVector = std::vector<Field, AllocatorWithMemoryTracking<Field>>;
 /// to construct both of these types from FieldVector, and have the caller
 /// specify the desired Field type explicitly.
 /// NOLINTBEGIN(modernize-type-traits)
+/// 翻译：
+/// Array和Tuple使用相同的存储类型--FieldVector，但声明不同的类型，
+/// 以便调用者可以选择构造Array类型的Field还是Tuple类型的Field。
+/// 另一种方法是构造FieldVector，并让调用者显式指定所需的Field类型。
 #define DEFINE_FIELD_VECTOR(X) \
 struct X : public FieldVector \
 { \
@@ -53,6 +57,7 @@ DEFINE_FIELD_MAP(Object);
 
 #undef DEFINE_FIELD_MAP
 
+/// 聚合函数状态数据
 struct AggregateFunctionStateData
 {
     String name; /// Name with arguments.
@@ -65,6 +70,7 @@ struct AggregateFunctionStateData
     bool operator == (const AggregateFunctionStateData & rhs) const;
 };
 
+/// 自定义类型
 struct CustomType
 {
     struct CustomTypeImpl
@@ -102,6 +108,7 @@ template <typename T> bool decimalEqual(T x, T y, UInt32 x_scale, UInt32 y_scale
 template <typename T> bool decimalLess(T x, T y, UInt32 x_scale, UInt32 y_scale);
 template <typename T> bool decimalLessOrEqual(T x, T y, UInt32 x_scale, UInt32 y_scale);
 
+/// 小数类型
 template <is_decimal T>
 class DecimalField
 {
@@ -149,27 +156,33 @@ private:
     UInt32 scale;
 };
 
+/// 小数类型模板实例化
 extern template class DecimalField<Decimal32>;
 extern template class DecimalField<Decimal64>;
 extern template class DecimalField<Decimal128>;
 extern template class DecimalField<Decimal256>;
 extern template class DecimalField<DateTime64>;
 
+/// 小数类型模板实例化
 template <typename T> constexpr bool is_decimal_field = false;
 template <> constexpr inline bool is_decimal_field<DecimalField<Decimal32>> = true;
 template <> constexpr inline bool is_decimal_field<DecimalField<Decimal64>> = true;
 template <> constexpr inline bool is_decimal_field<DecimalField<Decimal128>> = true;
 template <> constexpr inline bool is_decimal_field<DecimalField<Decimal256>> = true;
 
+/// 最近类型实现
 template <typename T, typename SFINAE = void>
 struct NearestFieldTypeImpl;
 
+/// 最近类型
 template <typename T>
 using NearestFieldType = typename NearestFieldTypeImpl<T>::Type;
 
 /// char may be signed or unsigned, and behave identically to signed char or unsigned char,
 ///  but they are always three different types.
 /// signedness of char is different in Linux on x86 and Linux on ARM.
+/// char可能是signed或unsigned，在Linux的x86和Linux的ARM上行为相同，但它们总是三个不同的类型。
+/// char的signedness在Linux的x86和Linux的ARM上不同。
 template <> struct NearestFieldTypeImpl<char> { using Type = std::conditional_t<is_signed_v<char>, Int64, UInt64>; };
 template <> struct NearestFieldTypeImpl<signed char> { using Type = Int64; };
 template <> struct NearestFieldTypeImpl<unsigned char> { using Type = UInt64; };
@@ -225,6 +238,7 @@ template <> struct NearestFieldTypeImpl<AggregateFunctionStateData> { using Type
 template <> struct NearestFieldTypeImpl<CustomType> { using Type = CustomType; };
 
 // For enum types, use the field type that corresponds to their underlying type.
+/// 对于枚举类型，使用与它们的基础类型对应的字段类型。
 template <typename T>
 requires std::is_enum_v<T>
 struct NearestFieldTypeImpl<T>
@@ -249,6 +263,9 @@ concept not_field_or_bool_or_stringlike
 
 /** 32 is enough. Round number is used for alignment and for better arithmetic inside std::vector.
   * NOTE: Actually, sizeof(std::string) is 32 when using libc++, so Field is 40 bytes.
+  * 翻译：
+  * 32足够了。Round number用于对齐和更好的算术运算。
+  * 注意：实际上，使用libc++时，sizeof(std::string)是32，所以Field是40字节。
   */
 static constexpr auto DBMS_MIN_FIELD_SIZE = 32;
 
@@ -259,6 +276,12 @@ static constexpr auto DBMS_MIN_FIELD_SIZE = 32;
   *
   * Used to represent a single value of one of several types in memory.
   * Warning! Prefer to use chunks of columns instead of single values. See IColumn.h
+  * 
+  * 几种类型的判别联合。
+  * 用于替换`boost::variant`。
+  * 不是通用的，但有点更高效，更简单。
+  * 用于在内存中表示几种类型中的一个值。
+  * 警告！最好使用列块而不是单个值。参见IColumn.h。
   */
 class Field
 {
@@ -469,6 +492,7 @@ public:
 
     /// Field is template parameter, to allow universal reference for field,
     /// that is useful for const and non-const .
+    /// Field是模板参数，允许通用引用，这对于const和非const都很有用。
     template <typename F, typename FieldRef>
     static auto dispatch(F && f, FieldRef && field)
     {
@@ -518,6 +542,8 @@ private:
 
     /// This function is prone to type punning and should never be used outside of Field class,
     /// whenever it is used within this class the stored type should be checked in advance.
+    /// 这个函数容易进行类型双关，不应该在Field类之外使用。
+    /// 当在类内部使用时，应该提前检查存储类型。
     template <typename T>
     NearestFieldType<std::decay_t<T>> & get()
     {
@@ -657,7 +683,7 @@ private:
 
 using Row = std::vector<Field>;
 
-
+/// 将类型转换为枚举值。
 template <> struct Field::TypeToEnum<Null> { static constexpr Types::Which value = Types::Null; };
 template <> struct Field::TypeToEnum<UInt64>  { static constexpr Types::Which value = Types::UInt64; };
 template <> struct Field::TypeToEnum<UInt128> { static constexpr Types::Which value = Types::UInt128; };

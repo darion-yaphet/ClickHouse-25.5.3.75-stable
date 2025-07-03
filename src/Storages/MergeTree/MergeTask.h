@@ -49,29 +49,45 @@ using MergedPartOffsetsPtr = std::shared_ptr<MergedPartOffsets>;
 
 /**
  * Overview of the merge algorithm
+ * 合并算法概述
  *
  * Each merge is executed sequentially block by block.
+ * 每个合并按块顺序执行。
  * The main idea is to make a merge not a subroutine which is executed
  * in a thread pool and may occupy a thread for a period of time,
  * but to make a merge a coroutine which can suspend the execution
  * in some points and then resume the execution from this point.
+ * 主要思想是使合并不是在线程池中执行的子例程，
+ * 可能占用线程一段时间，
+ * 而是使合并成为协程，可以在某些点暂停执行，然后从该点恢复执行。
  *
  * A perfect point where to suspend the execution is after the work over a block is finished.
+ * 一个完美的暂停执行点是块工作完成后。
  * The task itself will be executed via BackgroundJobExecutor.
+ * 任务本身将通过 BackgroundJobExecutor 执行。
  *
  * The interface of the task is simple.
+ * 任务的接口很简单。
  * The main method is `execute()` which will return true, if the task wants to be executed again and false otherwise.
+ * 主要方法是 `execute()`，如果任务想要再次执行，则返回 true，否则返回 false。
  *
  * With this kind of task we can give a merge a priority.
+ * 有了这种任务，我们可以给合并一个优先级。
  * A priority is simple - the lower the size of the merge, the higher priority.
+ * 优先级很简单 - 合并越小，优先级越高。
+ *
  * So, if ClickHouse wants to merge some really big parts into a bigger part,
  * then it will be executed for a long time, because the result of the merge is not really needed immediately.
  * It is better to merge small parts as soon as possible.
+ * 因此，如果 ClickHouse 想要将一些非常大的部分合并为更大的部分，
+ * 那么它将执行很长时间，因为合并的结果并不真正需要立即使用。
+ * 最好尽快合并小部分。
 */
 class MergeTask
 {
 public:
 
+    // 构造函数
     MergeTask(
         FutureMergedMutatedPartPtr future_part_,
         StorageMetadataPtr metadata_snapshot_,
@@ -95,8 +111,10 @@ public:
         PartitionActionBlocker * merges_blocker_,
         ActionBlocker * ttl_merges_blocker_)
         {
+            // 创建全局上下文
             global_ctx = std::make_shared<GlobalRuntimeContext>();
 
+            // 设置全局上下文
             global_ctx->future_part = std::move(future_part_);
             global_ctx->metadata_snapshot = std::move(metadata_snapshot_);
             global_ctx->merge_entry = std::move(merge_entry_);
@@ -122,6 +140,7 @@ public:
             global_ctx->suffix = std::move(suffix_);
             global_ctx->merging_params = std::move(merging_params_);
 
+            // 创建准备阶段上下文
             auto prepare_stage_ctx = std::make_shared<ExecuteAndFinalizeHorizontalPartRuntimeContext>();
             (*stages.begin())->setRuntimeContext(std::move(prepare_stage_ctx), global_ctx);
         }
@@ -169,11 +188,15 @@ private:
     /// By default this context is uninitialized, but some variables has to be set after construction,
     /// some variables are used in a process of execution
     /// Proper initialization is responsibility of the author
+    /// 默认情况下，此上下文未初始化，但某些变量必须在构造后设置，
+    /// 某些变量在执行过程中使用。
+    /// 作者有责任正确初始化。
     struct GlobalRuntimeContext : public IStageRuntimeContext
     {
         TableLockHolder * holder;
         MergeList::Entry * merge_entry{nullptr};
         /// If not null, use this instead of the global MergeList::Entry. This is for merging projections.
+        // 如果非空，则使用此代替全局 MergeList::Entry。这是用于合并投影的。
         std::unique_ptr<MergeListElement> projection_merge_list_element;
         MergeListElement * merge_list_element_ptr{nullptr};
         MergeTreeData * data{nullptr};
@@ -185,6 +208,7 @@ private:
         FutureMergedMutatedPartPtr future_part{nullptr};
         std::vector<AlterConversionsPtr> alter_conversions;
         /// This will be either nullptr or new_data_part, so raw pointer is ok.
+        // 这将是 nullptr 或 new_data_part，所以原始指针是可以的。
         IMergeTreeDataPart * parent_part{nullptr};
         MergedPartOffsetsPtr merged_part_offsets;
         ContextPtr context{nullptr};
@@ -248,28 +272,46 @@ private:
     /// By default this context is uninitialized, but some variables has to be set after construction,
     /// some variables are used in a process of execution
     /// Proper initialization is responsibility of the author
+    // 默认情况下，此上下文未初始化，但某些变量必须在构造后设置，
+    // 某些变量在执行过程中使用。
+    // 作者有责任正确初始化。
+    // 执行和最终化水平部分运行时上下文
     struct ExecuteAndFinalizeHorizontalPartRuntimeContext : public IStageRuntimeContext
     {
+        // 是否需要删除过期值
         bool need_remove_expired_values{false};
+        // 是否强制 TTL
         bool force_ttl{false};
+        // 压缩编码器
         CompressionCodecPtr compression_codec{nullptr};
+        // 行源临时文件
         std::shared_ptr<RowsSourcesTemporaryFile> rows_sources_temporary_file;
+        // 列大小估计器
         std::optional<ColumnSizeEstimator> column_sizes{};
 
-        /// For projections to rebuild
+        // 用于重建投影的投影名称到其块的映射
         using ProjectionNameToItsBlocks = std::map<String, MergeTreeData::MutableDataPartsVector>;
+        // 投影名称到其块的映射
         ProjectionNameToItsBlocks projection_parts;
+        // 投影名称到其块的迭代器
         std::move_iterator<ProjectionNameToItsBlocks::iterator> projection_parts_iterator;
+        // 投影压缩
         std::vector<Squashing> projection_squashes;
+        // 投影块数
         size_t projection_block_num = 0;
+        // 合并投影部分任务指针
         ExecutableTaskPtr merge_projection_parts_task_ptr;
 
+        // 初始化预留
         size_t initial_reservation{0};
+        // 是否直接读取
         bool read_with_direct_io{false};
 
+        // 是否取消
         std::function<bool()> is_cancelled{};
 
         /// Local variables for this stage
+
         size_t sum_input_rows_upper_bound{0};
         size_t sum_compressed_bytes_upper_bound{0};
         size_t sum_uncompressed_bytes_upper_bound{0};
@@ -283,8 +325,10 @@ private:
         UInt64 elapsed_execute_ns{0};
     };
 
+    // 执行和最终化水平部分运行时上下文指针
     using ExecuteAndFinalizeHorizontalPartRuntimeContextPtr = std::shared_ptr<ExecuteAndFinalizeHorizontalPartRuntimeContext>;
 
+    // 执行和最终化水平部分
     struct ExecuteAndFinalizeHorizontalPart : public IStage
     {
         bool execute() override;

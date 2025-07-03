@@ -19,6 +19,7 @@ using namespace std::literals;
 namespace DB
 {
 
+/// 错误代码
 namespace ErrorCodes
 {
 extern const int BAD_TYPE_OF_FIELD;
@@ -31,6 +32,7 @@ extern const int LOGICAL_ERROR;
 extern const int ILLEGAL_TYPE_OF_ARGUMENT;
 }
 
+/// 聚合函数状态数据比较运算符
 bool AggregateFunctionStateData::operator < (const AggregateFunctionStateData &) const
 {
     throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Operator < is not implemented for AggregateFunctionStateData.");
@@ -88,6 +90,7 @@ bool Field::operator< (const Field & rhs) const
 {
     if (which < rhs.which)
         return true;
+    
     if (which > rhs.which)
         return false;
 

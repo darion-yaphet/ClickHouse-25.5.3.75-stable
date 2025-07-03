@@ -15,9 +15,11 @@ using CommittingBlocks = std::unordered_map<String, std::set<Int64>>;
 
 CommittingBlocks getCommittingBlocks(zkutil::ZooKeeperPtr & zookeeper, const std::string & zookeeper_path, std::optional<PartitionIdsHint> & partition_ids_hint);
 
+// 分布式合并谓词
 template<typename VirtualPartsT, typename MutationsStateT>
 class DistributedMergePredicate : public IMergePredicate
 {
+    // 检查合并部分的条件
     std::expected<void, PreformattedMessage> checkCanMergePartsPreconditions(const std::string & name, const MergeTreePartInfo & info) const
     {
         if (prev_virtual_parts_ptr && prev_virtual_parts_ptr->getContainingPart(info).empty())

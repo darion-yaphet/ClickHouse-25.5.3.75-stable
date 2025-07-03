@@ -13,8 +13,10 @@ namespace DB
 {
 
 /** Global planner context contains common objects that are shared between each planner context.
+  * 全局规划器上下文包含在每个规划器上下文中共享的常见对象。
   *
   * 1. Column identifiers.
+  * 1. 列标识符。
   */
 
 class QueryNode;
@@ -33,9 +35,11 @@ using PlannerContextPtr = std::shared_ptr<PlannerContext>;
 
 using RawTableExpressionDataMap = std::unordered_map<QueryTreeNodePtr, TableExpressionData *>;
 
+/// 全局规划器上下文包含在每个规划器上下文中共享的常见对象。
 class GlobalPlannerContext
 {
 public:
+    /// 构造函数。
     GlobalPlannerContext(
         const QueryNode * parallel_replicas_node_,
         const TableNode * parallel_replicas_table_,
@@ -47,12 +51,14 @@ public:
     }
 
     /** Create column identifier for column node.
+      * 为列节点创建列标识符。
       *
       * Result column identifier is added into context.
       */
     const ColumnIdentifier & createColumnIdentifier(const QueryTreeNodePtr & column_node);
 
     /** Create column identifier for column and column source.
+      * 为列和列源创建列标识符。
       *
       * Result column identifier is added into context.
       */
@@ -69,12 +75,18 @@ public:
     const RawTableExpressionDataMap & getTableExpressionDataMap() const noexcept { return shared_table_expression_data; }
 
     /// The query which will be executed with parallel replicas.
+    /// 将使用并行副本执行的查询。
     /// In case if only the most inner subquery can be executed with parallel replicas, node is nullptr.
+    /// 在只有最内层子查询可以并行执行的情况下，节点为 nullptr。
     const QueryNode * const parallel_replicas_node = nullptr;
+
     /// Table which is used with parallel replicas reading. Now, only one table is supported by the protocol.
+    /// 使用并行副本读取的表。目前，协议只支持一个表。
     /// It is the left-most table of the query (in JOINs, UNIONs and subqueries).
+    /// 它是查询的左最表（在 JOINs、UNIONs 和子查询中）。
     const TableNode * const parallel_replicas_table = nullptr;
 
+    /// 表表达式数据映射。
     const FiltersForTableExpressionMap filters_for_table_expressions;
 
 private:

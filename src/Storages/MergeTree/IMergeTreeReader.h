@@ -8,13 +8,17 @@
 
 namespace DB
 {
-
+// 虚拟字段
 using VirtualFields = std::unordered_map<String, Field>;
 using ValueSizeMap = std::map<std::string, double>;
 
 /// Reads the data between pairs of marks in the same part. When reading consecutive ranges, avoids unnecessary seeks.
+/// 当读取连续范围时，避免不必要的 seek。
 /// When ranges are almost consecutive, seeks are fast because they are performed inside the buffer.
+/// 当范围几乎连续时，seek 很快，因为它们在缓冲区中执行。
 /// Avoids loading the marks file if it is not needed (e.g. when reading the whole part).
+/// 避免加载 marks 文件（例如，当读取整个部分时）。
+// 合并树读取器接口
 class IMergeTreeReader : private boost::noncopyable
 {
 public:

@@ -7,6 +7,7 @@ namespace DB
 {
 
 /** Base class for most parsers
+  * 大多数解析器的基类。
   */
 class IParserBase : public IParser
 {

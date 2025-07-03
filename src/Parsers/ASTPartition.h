@@ -7,6 +7,7 @@ namespace DB
 {
 
 /// Either a (possibly compound) expression representing a partition value or a partition ID.
+/// 表示分区值或分区 ID 的表达式（可能是复合的）。
 class ASTPartition : public IAST
 {
 public:

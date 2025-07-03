@@ -15,9 +15,13 @@ namespace DB
 class ISource : public IProcessor
 {
 private:
+    /// 用于保护读取进度计数器的互斥锁。
     std::mutex read_progress_mutex;
+    /// 用于记录读取进度计数器的结构。
     ReadProgressCounters read_progress;
+    /// 用于记录读取进度是否已设置的布尔值。
     std::atomic_bool read_progress_was_set = false;
+    /// 用于记录是否启用自动进度跟踪的布尔值。
     bool auto_progress;
 
 protected:

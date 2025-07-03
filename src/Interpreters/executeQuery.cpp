@@ -465,6 +465,7 @@ QueryLogElement logQueryStart(
         return elem;
 
     /// Log into system table start of query execution, if need.
+    // 如果需要，将查询日志记录到系统表中。
     if (log_queries)
     {
         /// This check is not obvious, but without it 01220_scalar_optimization_in_alter fails.
@@ -538,6 +539,7 @@ QueryLogElement logQueryStart(
     return elem;
 }
 
+/// 记录查询指标日志结束。
 void logQueryMetricLogFinish(ContextPtr context, bool internal, String query_id, std::chrono::system_clock::time_point finish_time, QueryStatusInfoPtr info)
 {
     if (auto query_metric_log = context->getQueryMetricLog(); query_metric_log && !internal)
@@ -548,9 +550,13 @@ void logQueryMetricLogFinish(ContextPtr context, bool internal, String query_id,
             /// Only collect data on query finish if the elapsed time exceeds the interval to collect.
             /// If we don't do this, it's counter-intuitive to have a single entry for every quick query
             /// where the data is basically a subset of the query_log.
+            /// 只有当查询时间超过指标日志间隔时，才收集数据。
+            /// 如果我们不这样做，对于那些查询时间非常短的查询，数据基本上是 query_log 的子集，这会让人感到困惑。
+            /// 另一方面，每当查询完成时，我们都有一个新的条目，这样我们就可以只查询 query_metric_log 而不需要查询 query_log 的最终状态。
             /// On the other hand, it's very convenient to have a new entry whenever the query finishes
             /// so that we can get nice time-series querying only query_metric_log without the need
             /// to query the final state in query_log.
+            /// 另一方面，每当查询完成时，我们都有一个新的条目，这样我们就可以只查询 query_metric_log 而不需要查询 query_log 的最终状态。
             auto collect_on_finish = info->elapsed_microseconds > interval_milliseconds * 1000;
             auto query_info = collect_on_finish ? info : nullptr;
             query_metric_log->finishQuery(query_id, finish_time, query_info);
@@ -562,6 +568,7 @@ void logQueryMetricLogFinish(ContextPtr context, bool internal, String query_id,
     }
 }
 
+/// 刷新查询进度。
 static ResultProgress flushQueryProgress(const QueryPipeline & pipeline, bool pulling_pipeline, const ProgressCallback & progress_callback, QueryStatusPtr process_list_elem)
 {
     ResultProgress res(0, 0);
@@ -587,6 +594,7 @@ static ResultProgress flushQueryProgress(const QueryPipeline & pipeline, bool pu
     return res;
 }
 
+/// 记录查询完成。
 void logQueryFinishImpl(
     QueryLogElement & elem,
     const ContextMutablePtr & context,
@@ -650,6 +658,7 @@ void logQueryFinishImpl(
 
     }
 
+    // 如果查询 span 不为空且启用了跟踪，则添加查询信息。
     if (query_span && query_span->isTraceEnabled())
     {
         query_span->addAttribute("db.statement", elem.query);
@@ -668,6 +677,7 @@ void logQueryFinishImpl(
             query_span->addAttribute("clickhouse.user", user_name);
         }
 
+        // 如果启用了日志查询设置，则添加查询设置信息。
         if (settings[Setting::log_query_settings])
         {
             auto changes = settings.changes();
@@ -680,6 +690,7 @@ void logQueryFinishImpl(
     }
 }
 
+/// 记录查询完成。
 void logQueryFinish(
     QueryLogElement & elem,
     const ContextMutablePtr & context,
@@ -694,6 +705,7 @@ void logQueryFinish(
     logQueryFinishImpl(elem, context, query_ast, std::move(query_pipeline), pulling_pipeline, query_span, query_result_cache_usage, internal, time_now);
 }
 
+/// 记录查询异常。
 void logQueryException(
     QueryLogElement & elem,
     const ContextMutablePtr & context,
@@ -782,6 +794,7 @@ void logExceptionBeforeStart(
     auto query_end_time = std::chrono::system_clock::now();
 
     /// Exception before the query execution.
+
     if (auto quota = context->getQuota())
         quota->used(QuotaType::ERRORS, 1, /* check_exceeded = */ false);
 
@@ -790,6 +803,7 @@ void logExceptionBeforeStart(
     const auto & client_info = context->getClientInfo();
 
     /// Log the start of query execution into the table if necessary.
+    /// 如果需要，将查询日志记录到系统表中。
     QueryLogElement elem;
 
     elem.type = QueryLogElementType::EXCEPTION_BEFORE_START;
@@ -844,6 +858,7 @@ void logExceptionBeforeStart(
     /// Update performance counters before logging to query_log
     CurrentThread::finalizePerformanceCounters();
 
+    /// 如果需要，将查询日志记录到系统表中。
     if (auto query_log = context->getQueryLog())
     {
         if (settings[Setting::log_queries] && elem.type >= settings[Setting::log_queries_min_type]
@@ -1016,6 +1031,7 @@ static BlockIO executeQueryImpl(
     size_t log_queries_cut_to_length = settings[Setting::log_queries_cut_to_length];
 
     /// Parse the query from string.
+    /// 尝试解析查询。
     try
     {
         if (stage == QueryProcessingStage::QueryPlan)
@@ -1031,6 +1047,7 @@ static BlockIO executeQueryImpl(
                 throw Exception(ErrorCodes::SUPPORT_IS_DISABLED,
                                 "Support for Kusto Query Engine (KQL) is disabled (turn on setting 'allow_experimental_kusto_dialect')");
 
+            /// 解析 KQL 查询。
             ParserKQLStatement parser(end, settings[Setting::allow_settings_after_format_in_insert]);
             /// TODO: parser should fail early when max_query_size limit is reached.
             out_ast = parseKQLQuery(parser, begin, end, "", max_query_size, settings[Setting::max_parser_depth], settings[Setting::max_parser_backtracks]);
@@ -1236,9 +1253,13 @@ static BlockIO executeQueryImpl(
         }
 
         /// There is an option of probabilistic logging of queries.
+        /// 有一个概率性记录查询的选项。
         /// If it is used - do the random sampling and "collapse" the settings.
         /// It allows to consistently log queries with all the subqueries in distributed query processing
         /// (subqueries on remote nodes will receive these "collapsed" settings)
+        /// 如果使用 - 进行随机采样并 "折叠" 设置。
+        /// 它允许一致地记录包含所有子查询的查询
+        /// （远程节点上的子查询将收到这些 "折叠" 设置）
         if (!internal && settings[Setting::log_queries] && settings[Setting::log_queries_probability] < 1.0)
         {
             std::bernoulli_distribution should_write_log{settings[Setting::log_queries_probability]};
@@ -1253,17 +1274,21 @@ static BlockIO executeQueryImpl(
         {
             /// Interpret SETTINGS clauses as early as possible (before invoking the corresponding interpreter),
             /// to allow settings to take effect.
+            /// 尽早解释 SETTINGS 子句（在调用相应的解释器之前），
+            /// 以便设置生效。
             InterpreterSetQuery::applySettingsFromQuery(out_ast, context);
             validateAnalyzerSettings(out_ast, settings[Setting::allow_experimental_analyzer]);
-
+            /// 如果设置了严格标识符格式，则格式化 AST。
             if (settings[Setting::enforce_strict_identifier_format])
             {
+                /// 写入缓冲区。
                 WriteBufferFromOwnString buf;
                 IAST::FormatSettings enforce_strict_identifier_format_settings(true);
                 enforce_strict_identifier_format_settings.enforce_strict_identifier_format = true;
                 out_ast->format(buf, enforce_strict_identifier_format_settings);
             }
 
+            /// 如果查询是 INSERT 查询，则设置尾指针。
             if (auto * insert_query = out_ast->as<ASTInsertQuery>())
                 insert_query->tail = istr;
 

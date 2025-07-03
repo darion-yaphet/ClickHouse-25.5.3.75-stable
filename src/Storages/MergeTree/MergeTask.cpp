@@ -61,7 +61,7 @@
     #include <Storages/MergeTree/MergeTreeDataPartCompact.h>
 #endif
 
-
+/// 合并事件
 namespace ProfileEvents
 {
     extern const Event Merge;
@@ -75,6 +75,7 @@ namespace ProfileEvents
     extern const Event MergeProjectionStageExecuteMilliseconds;
 }
 
+/// 当前指标
 namespace CurrentMetrics
 {
     extern const Metric TemporaryFilesForMerge;
@@ -94,6 +95,7 @@ namespace Setting
     extern const SettingsUInt64 min_insert_block_size_rows;
 }
 
+/// 合并树设置
 namespace MergeTreeSetting
 {
     extern const MergeTreeSettingsBool allow_experimental_replacing_merge_with_cleanup;
@@ -117,6 +119,7 @@ namespace MergeTreeSetting
     extern const MergeTreeSettingsUInt64 max_merge_delayed_streams_for_parallel_write;
 }
 
+/// 错误代码
 namespace ErrorCodes
 {
     extern const int ABORTED;
@@ -125,10 +128,9 @@ namespace ErrorCodes
     extern const int SUPPORT_IS_DISABLED;
 }
 
-
 namespace
 {
-
+    // 获取列统计信息
 ColumnsStatistics getStatisticsForColumns(
     const NamesAndTypesList & columns_to_read,
     const StorageMetadataPtr & metadata_snapshot)
@@ -151,12 +153,15 @@ ColumnsStatistics getStatisticsForColumns(
 }
 
 /// Manages the "rows_sources" temporary file that is used during vertical merge.
+/// 管理垂直合并期间使用的 "rows_sources" 临时文件。
 class RowsSourcesTemporaryFile : public ITemporaryFileLookup
 {
 public:
     /// A logical name of the temporary file under which it will be known to the plan steps that use it.
+    // 临时文件的逻辑名称，在计划步骤中使用。
     static constexpr auto FILE_ID = "rows_sources";
 
+    // 构造函数
     explicit RowsSourcesTemporaryFile(TemporaryDataOnDiskScopePtr temporary_data_on_disk_)
         : temporary_data_on_disk(temporary_data_on_disk_->childScope(CurrentMetrics::TemporaryFilesForMerge))
     {
@@ -209,6 +214,7 @@ private:
     size_t final_size = 0;
 };
 
+/// 添加缺失的列到序列化信息。
 static void addMissedColumnsToSerializationInfos(
     size_t num_rows_in_parts,
     const Names & part_columns,
@@ -235,12 +241,14 @@ static void addMissedColumnsToSerializationInfos(
     }
 }
 
+/// 检查合并是否被取消。
 bool MergeTask::GlobalRuntimeContext::isCancelled() const
 {
     return (future_part ? merges_blocker->isCancelledForPartition(future_part->part_info.getPartitionId()) : merges_blocker->isCancelled())
         || merge_list_element_ptr->is_cancelled.load(std::memory_order_relaxed);
 }
 
+/// 检查合并是否被取消。
 void MergeTask::GlobalRuntimeContext::checkOperationIsNotCanceled() const
 {
     if (isCancelled())
@@ -250,6 +258,7 @@ void MergeTask::GlobalRuntimeContext::checkOperationIsNotCanceled() const
 }
 
 /// PK columns are sorted and merged, ordinary columns are gathered using info from merge step
+/// PK 列被排序和合并，普通列使用合并步骤中的信息收集。
 void MergeTask::ExecuteAndFinalizeHorizontalPart::extractMergingAndGatheringColumns() const
 {
     const auto & sorting_key_expr = global_ctx->metadata_snapshot->getSortingKey().expression;

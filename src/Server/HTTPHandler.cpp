@@ -107,6 +107,7 @@ bool tryAddHTTPOptionHeadersFromConfig(HTTPServerResponse & response, const Poco
 }
 
 /// Process options request. Useful for CORS.
+/// 处理选项请求。对于 CORS 很有用。
 void processOptionsRequest(HTTPServerResponse & response, const Poco::Util::LayeredConfiguration & config)
 {
     /// If can add some headers from config
@@ -119,6 +120,7 @@ void processOptionsRequest(HTTPServerResponse & response, const Poco::Util::Laye
 }
 }
 
+/// 解析会话超时。
 static std::chrono::steady_clock::duration parseSessionTimeout(
     const Poco::Util::AbstractConfiguration & config,
     const HTMLForm & params)
@@ -143,6 +145,7 @@ static std::chrono::steady_clock::duration parseSessionTimeout(
     return std::chrono::seconds(session_timeout);
 }
 
+/// 构造函数
 HTTPHandlerConnectionConfig::HTTPHandlerConnectionConfig(const Poco::Util::AbstractConfiguration & config, const std::string & config_prefix)
 {
     if (config.has(config_prefix + ".handler.password"))
@@ -200,9 +203,10 @@ HTTPHandler::HTTPHandler(IServer & server_, const HTTPHandlerConnectionConfig & 
 
 /// We need d-tor to be present in this translation unit to make it play well with some
 /// forward decls in the header. Other than that, the default d-tor would be OK.
+/// 我们需要 d-tor 在当前翻译单元中存在，以与一些前向声明一起播放。
 HTTPHandler::~HTTPHandler() = default;
 
-
+/// 认证用户。
 bool HTTPHandler::authenticateUser(HTTPServerRequest & request, HTMLForm & params, HTTPServerResponse & response)
 {
     return authenticateUserByHTTP(request, params, response, *session, request_credentials, connection_config, server.context(), log);
@@ -226,17 +230,20 @@ void HTTPHandler::processQuery(
 
     /// The user could specify session identifier and session timeout.
     /// It allows to modify settings, create temporary tables and reuse them in subsequent requests.
-
+    /// 用户可以指定会话标识符和会话超时。
+    /// 它允许修改设置、创建临时表并在后续请求中重用它们。
     String session_id;
     std::chrono::steady_clock::duration session_timeout;
     bool session_is_set = params.has("session_id");
     const auto & config = server.config();
 
     /// Close http session (if any) after processing the request
+    /// 处理请求后关闭 http 会话（如果有）
     bool close_session = false;
     if (params.getParsed<bool>("close_session", false) && server.config().getBool("enable_http_close_session", true))
         close_session = true;
 
+    /// 如果会话已设置，则创建会话上下文。
     if (session_is_set)
     {
         session_id = params.get("session_id");
@@ -258,13 +265,18 @@ void HTTPHandler::processQuery(
     /// the client has received all the data, but the session is not released yet. And it can (and sometimes does) happen
     /// that we'll try to acquire the same session in another request before releasing the session here, and the session for
     /// the following request will be technically locked, while it shouldn't be.
+    /// 我们还需要在这里和下面释放会话。如果只作为 SCOPE_EXIT 存在，它将在 processQuery 结束时调用 finalize 缓冲区，
+    /// 这意味着客户端已经接收了所有数据，但会话尚未释放。并且它可能会（并且经常）发生，我们将在释放会话后尝试在另一个请求中获取相同的会话，
+    /// 而会话技术上被锁定，而它不应该被锁定。
     /// Also, SCOPE_EXIT is still needed to release a session in case of any exception. If the exception occurs at some point
     /// after releasing the session below, this whole call will be no-op (due to named_session being nullptr already inside a session).
+    /// 此外，SCOPE_EXIT 仍然需要释放会话，以防任何异常。如果异常发生在释放会话后，整个调用将不会执行（由于 named_session 已经是 nullptr 内部会话）。
     SCOPE_EXIT_SAFE({ releaseOrCloseSession(session_id, close_session); });
 
     auto context = session->makeQueryContext();
 
     /// This parameter is used to tune the behavior of output formats (such as Native) for compatibility.
+    /// 此参数用于调整输出格式（如 Native）的行为以实现兼容性。
     if (params.has("client_protocol_version"))
     {
         UInt64 version_param = parse<UInt64>(params.get("client_protocol_version"));
@@ -272,6 +284,7 @@ void HTTPHandler::processQuery(
     }
 
     /// The client can pass a HTTP header indicating supported compression method (gzip or deflate).
+    /// 客户端可以传递一个 HTTP 头来指示支持的压缩方法（gzip 或 deflate）。
     String http_response_compression_methods = request.get("Accept-Encoding", "");
     CompressionMethod http_response_compression_method = CompressionMethod::None;
 
@@ -282,15 +295,19 @@ void HTTPHandler::processQuery(
 
     /// Client can pass a 'compress' flag in the query string. In this case the query result is
     /// compressed using internal algorithm. This is not reflected in HTTP headers.
+    /// 客户端可以传递一个 'compress' 标志在查询字符串中。在这种情况下，查询结果被内部算法压缩。这在 HTTP 头中没有反映。
     bool internal_compression = params.getParsed<bool>("compress", false);
 
     /// At least, we should postpone sending of first buffer_size result bytes
+    /// 至少，我们应该推迟发送第一个 buffer_size 结果字节
     size_t buffer_size_total = std::max(
         params.getParsed<size_t>("buffer_size", context->getSettingsRef()[Setting::http_response_buffer_size]),
         static_cast<size_t>(DBMS_DEFAULT_BUFFER_SIZE));
 
     /// If it is specified, the whole result will be buffered.
     ///  First ~buffer_size bytes will be buffered in memory, the remaining bytes will be stored in temporary file.
+    /// 如果指定，整个结果将被缓冲。
+    /// 前 ~buffer_size 字节将缓存在内存中，其余字节将存储在临时文件中。
     bool buffer_until_eof = params.getParsed<bool>("wait_end_of_query", context->getSettingsRef()[Setting::http_wait_end_of_query]);
 
     size_t buffer_size_http = DBMS_DEFAULT_BUFFER_SIZE;
@@ -331,6 +348,7 @@ void HTTPHandler::processQuery(
         used_output.out = used_output.out_compressed_holder;
     }
 
+    /// 如果需要缓冲，则创建级联写入缓冲区。
     if (buffer_size_memory > 0 || buffer_until_eof)
     {
         CascadeWriteBuffer::WriteBufferPtrs cascade_buffers;
@@ -382,6 +400,7 @@ void HTTPHandler::processQuery(
 
     /// The data can also be compressed using incompatible internal algorithm. This is indicated by
     /// 'decompress' query parameter.
+    /// 数据也可以使用不兼容的内部算法压缩。这由 'decompress' 查询参数指示。
     std::unique_ptr<ReadBuffer> in_post_maybe_compressed;
     bool is_in_post_compressed = false;
     if (params.getParsed<bool>("decompress", false))
@@ -407,10 +426,12 @@ void HTTPHandler::processQuery(
         context->setDefaultFormat(default_format);
 
     /// Anything else beside HTTP POST should be readonly queries.
+    /// 任何其他 HTTP 方法都应该只读查询。
     setReadOnlyIfHTTPMethodIdempotent(context, request.getMethod());
 
     bool has_external_data = startsWith(request.getContentType(), "multipart/form-data");
 
+    /// 参数可以被跳过。
     auto param_could_be_skipped = [&] (const String & name)
     {
         /// Empty parameter appears when URL like ?&a=b or a=b&&c=d. Just skip them for user's convenience.
@@ -459,32 +480,45 @@ void HTTPHandler::processQuery(
     const auto & settings = context->getSettingsRef();
 
     /// Set the query id supplied by the user, if any, and also update the OpenTelemetry fields.
+    /// 设置用户提供的查询 ID，如果有，并更新 OpenTelemetry 字段。
     context->setCurrentQueryId(params.get("query_id", request.get("X-ClickHouse-Query-Id", "")));
 
     /// Initialize query scope, once query_id is initialized.
     /// (To track as much allocations as possible)
+    /// 初始化查询范围，一旦查询 ID 初始化。
+    /// (尽可能跟踪尽可能多的分配)
     query_scope.emplace(context);
 
     /// NOTE: this may create pretty huge allocations that will not be accounted in trace_log,
     /// because memory_profiler_sample_probability/memory_profiler_step are not applied yet,
     /// they will be applied in ProcessList::insert() from executeQuery() itself.
+    /// 注意：这可能会创建相当大的分配，这些分配不会在 trace_log 中计数，
+    /// 因为 memory_profiler_sample_probability/memory_profiler_step 尚未应用，
+    /// 它们将在 executeQuery() 本身中的 ProcessList::insert() 中应用。
     const auto & query = getQuery(request, params, context);
     std::unique_ptr<ReadBuffer> in_param = std::make_unique<ReadBufferFromString>(query);
 
+    /// 设置发送进度标志和进度间隔。
     used_output.out_holder->setSendProgress(settings[Setting::send_progress_in_http_headers]);
     used_output.out_holder->setSendProgressInterval(settings[Setting::http_headers_progress_interval_ms]);
 
     /// If 'http_native_compression_disable_checksumming_on_decompress' setting is turned on,
     /// checksums of client data compressed with internal algorithm are not checked.
+    /// 如果 'http_native_compression_disable_checksumming_on_decompress' 设置为开启，
+    /// 客户端数据压缩的校验和不会被检查。
     if (is_in_post_compressed && settings[Setting::http_native_compression_disable_checksumming_on_decompress])
         static_cast<CompressedReadBuffer &>(*in_post_maybe_compressed).disableChecksumming();
 
     /// Add CORS header if 'add_http_cors_header' setting is turned on send * in Access-Control-Allow-Origin
     /// Note that whether the header is added is determined by the settings, and we can only get the user settings after authentication.
     /// Once the authentication fails, the header can't be added.
+    /// 添加 CORS 头，如果 'add_http_cors_header' 设置为开启发送 * 在 Access-Control-Allow-Origin
+    /// 注意，是否添加头是由设置决定的，我们只能在认证失败后才能获取用户设置。
+    /// 一旦认证失败，头就不能添加。
     if (settings[Setting::add_http_cors_header] && !request.get("Origin", "").empty() && !config.has("http_options_response"))
         used_output.out_holder->addHeaderCORS(true);
 
+    /// 添加进度回调。
     auto append_callback = [my_context = context] (ProgressCallback callback)
     {
         auto prev = my_context->getProgressCallback();
@@ -500,6 +534,8 @@ void HTTPHandler::processQuery(
 
     /// While still no data has been sent, we will report about query execution progress by sending HTTP headers.
     /// Note that we add it unconditionally so the progress is available for `X-ClickHouse-Summary`
+    /// 虽然还没有数据被发送，但我们通过发送 HTTP 头来报告查询执行进度。
+    /// 注意，我们无条件地添加它，以便进度可用于 `X-ClickHouse-Summary`
     append_callback([&used_output](const Progress & progress)
     {
         used_output.out_holder->onProgress(progress);
@@ -539,6 +575,7 @@ void HTTPHandler::processQuery(
             response.set(name, value);
     };
 
+    /// 处理输出格式中的异常。
     auto handle_exception_in_output_format = [&, session_id, close_session](IOutputFormat & current_output_format,
                                                  const String & format_name,
                                                  const ContextPtr & context_,
@@ -591,6 +628,7 @@ void HTTPHandler::processQuery(
         }
     };
 
+    /// 查询完成回调。
     auto query_finish_callback = [&]()
     {
         releaseOrCloseSession(session_id, close_session);
@@ -607,6 +645,7 @@ void HTTPHandler::processQuery(
         used_output.finalize();
     };
 
+    /// 执行查询。
     executeQuery(
         *in,
         *used_output.out_maybe_delayed_and_compressed,
@@ -619,6 +658,7 @@ void HTTPHandler::processQuery(
         query_finish_callback);
 }
 
+/// 尝试发送异常到客户端。
 bool HTTPHandler::trySendExceptionToClient(
     int exception_code, const std::string & message, HTTPServerRequest & request, HTTPServerResponse & response, Output & used_output)
 try
@@ -633,12 +673,16 @@ try
     chassert(used_output.out_maybe_compressed);
 
     /// Destroy CascadeBuffer to actualize buffers' positions and reset extra references
+    /// 销毁级联缓冲区以实际化缓冲区的位置并重置额外引用
     if (used_output.hasDelayed())
     {
         /// do not call finalize here for CascadeWriteBuffer used_output.out_maybe_delayed_and_compressed,
         /// exception is written into used_output.out_maybe_compressed later
+        /// 不要在这里调用 finalize 用于级联缓冲区 used_output.out_maybe_delayed_and_compressed，
+        /// 异常稍后写入 used_output.out_maybe_compressed
         auto write_buffers = used_output.out_delayed_and_compressed_holder->getResultBuffers();
         /// cancel the rest unused buffers
+        /// 取消其余未使用的缓冲区
         for (auto & wb : write_buffers)
             if (isSharedPtrUnique(wb))
                 wb->cancel();
@@ -650,10 +694,12 @@ try
     if (used_output.exception_is_written)
     {
         /// everything has been held by output format write
+        /// 所有内容都由输出格式写入
         return true;
     }
 
     /// We might have special formatter for exception message.
+    /// 我们可能有一个特殊的格式化器用于异常消息。
     if (used_output.exception_writer)
     {
         used_output.exception_writer(*used_output.out_maybe_compressed, exception_code, message);
@@ -678,17 +724,21 @@ catch (...)
     return false;
 }
 
+/// 处理请求。
 void HTTPHandler::handleRequest(HTTPServerRequest & request, HTTPServerResponse & response, const ProfileEvents::Event & write_event)
 {
     setThreadName("HTTPHandler");
 
+    /// 创建会话。
     session = std::make_unique<Session>(server.context(), ClientInfo::Interface::HTTP, request.isSecure());
     SCOPE_EXIT({ session.reset(); });
+    /// 查询范围。
     std::optional<CurrentThread::QueryScope> query_scope;
 
     Output used_output;
 
     /// In case of exception, send stack trace to client.
+    /// 在异常情况下，向客户端发送堆栈跟踪。
     bool with_stacktrace = false;
 
     OpenTelemetry::TracingContextHolderPtr thread_trace_context;
@@ -707,6 +757,7 @@ void HTTPHandler::handleRequest(HTTPServerRequest & request, HTTPServerResponse 
         }
 
         // Parse the OpenTelemetry traceparent header.
+        /// 解析 OpenTelemetry traceparent 头。
         auto & client_trace_context = session->getClientTraceContext();
         if (request.has("traceparent"))
         {
@@ -720,6 +771,7 @@ void HTTPHandler::handleRequest(HTTPServerRequest & request, HTTPServerResponse 
         }
 
         // Setup tracing context for this thread
+        /// 为这个线程设置追踪上下文
         auto context = session->sessionOrGlobalContext();
         thread_trace_context = std::make_unique<OpenTelemetry::TracingContextHolder>("HTTPHandler",
             client_trace_context,
@@ -731,10 +783,12 @@ void HTTPHandler::handleRequest(HTTPServerRequest & request, HTTPServerResponse 
         thread_trace_context->root_span.addAttribute("http.user.agent", request.get("User-Agent", ""));
         thread_trace_context->root_span.addAttribute("http.method", request.getMethod());
 
+        /// 设置响应内容类型。
         response.setContentType("text/plain; charset=UTF-8");
         response.add("Access-Control-Expose-Headers", "X-ClickHouse-Query-Id,X-ClickHouse-Summary,X-ClickHouse-Server-Display-Name,X-ClickHouse-Format,X-ClickHouse-Timezone,X-ClickHouse-Exception-Code");
         response.set("X-ClickHouse-Server-Display-Name", server_display_name);
 
+        /// 如果 Origin 头存在，则添加 HTTP 选项头。
         if (!request.get("Origin", "").empty())
             tryAddHTTPOptionHeadersFromConfig(response, server.config());
 
@@ -748,7 +802,9 @@ void HTTPHandler::handleRequest(HTTPServerRequest & request, HTTPServerResponse 
             with_stacktrace = true;
 
         /// FIXME: maybe this check is already unnecessary.
+        /// FIXME: 也许这个检查已经不必要了。
         /// Workaround. Poco does not detect 411 Length Required case.
+        /// 解决方法。Poco 无法检测 411 Length Required 情况。
         if (request.getMethod() == HTTPRequest::HTTP_POST && !request.getChunkedTransferEncoding() && !request.hasContentLength())
         {
             throw Exception(ErrorCodes::HTTP_LENGTH_REQUIRED,
@@ -771,7 +827,9 @@ void HTTPHandler::handleRequest(HTTPServerRequest & request, HTTPServerResponse 
         tryLogCurrentException(log);
 
         /** If exception is received from remote server, then stack trace is embedded in message.
+          * 如果从远程服务器收到异常，则堆栈跟踪嵌入在消息中。
           * If exception is thrown on local server, then stack trace is in separate field.
+          * 如果本地服务器抛出异常，则堆栈跟踪在单独的字段中。
           */
         ExecutionStatus status = ExecutionStatus::fromCurrentException("", with_stacktrace);
         auto error_sent = trySendExceptionToClient(status.code, status.message, request, response, used_output);
