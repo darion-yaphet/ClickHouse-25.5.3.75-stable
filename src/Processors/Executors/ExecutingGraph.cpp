@@ -14,6 +14,11 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
+/// 执行图是查询执行的中心组件。
+/// 它表示查询的逻辑结构，并负责执行和协调各个处理器。
+/// 执行图由节点和边组成，节点表示处理器，边表示处理器之间的连接。
+/// 执行图是查询执行的中心组件。
+/// 它表示查询的逻辑结构，并负责执行和协调各个处理器。
 ExecutingGraph::ExecutingGraph(std::shared_ptr<Processors> processors_, bool profile_processors_)
     : processors(std::move(processors_))
     , profile_processors(profile_processors_)
@@ -38,6 +43,9 @@ ExecutingGraph::ExecutingGraph(std::shared_ptr<Processors> processors_, bool pro
         addEdges(node);
 }
 
+/// 添加边。
+/// 添加边到边列表。检查处理器是否已知。
+/// 对于直接边，它是具有输出端口的处理器；对于反向边，它是具有输入端口的处理器。
 ExecutingGraph::Edge & ExecutingGraph::addEdge(Edges & edges, Edge edge, const IProcessor * from, const IProcessor * to)
 {
     auto it = processors_map.find(to);
@@ -55,6 +63,9 @@ ExecutingGraph::Edge & ExecutingGraph::addEdge(Edges & edges, Edge edge, const I
     return added_edge;
 }
 
+/// 添加边。
+/// 添加边到边列表。检查处理器是否已知。
+/// 对于直接边，它是具有输出端口的处理器；对于反向边，它是具有输入端口的处理器。
 bool ExecutingGraph::addEdges(uint64_t node)
 {
     IProcessor * from = nodes[node]->processor;
@@ -185,6 +196,12 @@ ExecutingGraph::UpdateNodeStatus ExecutingGraph::expandPipeline(std::stack<uint6
     return UpdateNodeStatus::Done;
 }
 
+/// 初始化执行。
+/// 添加没有输入端口的处理器到栈。
+/// 对于没有输入端口的每个处理器，调用此方法。
+/// 您应该在调用中将内部计数器归零，以使其幂等。
+/// 处理器可以返回最后一次读取操作的新进度。
+/// 设置当前处理器的rows_before_limit计数器。
 void ExecutingGraph::initializeExecution(Queue & queue, Queue & async_queue)
 {
     std::stack<uint64_t> stack;
@@ -406,6 +423,7 @@ void ExecutingGraph::cancel(bool cancel_all_processors)
     std::exception_ptr exception_ptr;
 
     {
+        /// 取消所有处理器。
         std::lock_guard guard(processors_mutex);
         uint64_t num_processors = processors->size();
         for (uint64_t proc = 0; proc < num_processors; ++proc)
@@ -415,6 +433,8 @@ void ExecutingGraph::cancel(bool cancel_all_processors)
                 /// Stop all processors in the general case, but in a specific case
                 /// where the pipeline needs to return a result on a partially read table,
                 /// stop only the processors that read from the source
+                /// 在一般情况下停止所有处理器，但在特定情况下，管道需要返回部分读取表的结果，
+                /// 仅停止从源读取的处理器
                 if (cancel_all_processors || source_processors.at(proc))
                 {
                     IProcessor * processor = processors->at(proc).get();
@@ -431,6 +451,9 @@ void ExecutingGraph::cancel(bool cancel_all_processors)
                 ///    RemoteQueryExecutor)
                 /// b) there can be exception during query execution, and in this
                 ///    case, this exception can be ignored (not showed to the user).
+                /// 在一般情况下，记录任何异常，因为：
+                /// a) 它们非常罕见（我知道的唯一一个来自RemoteQueryExecutor）
+                /// b) 在查询执行期间可能发生异常，在这种情况下，这个异常可以被忽略（不显示给用户）。
                 tryLogCurrentException("ExecutingGraph");
             }
         }

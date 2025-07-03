@@ -22,7 +22,6 @@ public:
     virtual ~ChunkInfo() = default;
 };
 
-
 template <typename Derived>
 class ChunkInfoCloneable : public ChunkInfo
 {
@@ -41,11 +40,15 @@ public:
 
 /**
  * Chunk is a list of columns with the same length.
+ * 块是具有相同长度的列列表。
  * Chunk stores the number of rows in a separate field and supports invariant of equal column length.
+ * 块存储行数，并支持列长度相等的不变量。
  *
  * Chunk has move-only semantic. It's more lightweight than block cause doesn't store names, types and index_by_name.
+ * 块具有移动语义。它比块更轻量，因为它不存储名称、类型和index_by_name。
  *
- * Chunk can have empty set of columns but non-zero number of rows. It helps when only the number of rows is needed.
+ * Chunk can have empty set of columns but non-zero number of rows. 
+ * It helps when only the number of rows is needed.
  * Chunk can have columns with zero number of rows. It may happen, for example, if all rows were filtered.
  * Chunk is empty only if it has zero rows and empty list of columns.
  *

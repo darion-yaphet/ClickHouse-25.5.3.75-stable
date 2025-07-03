@@ -10,12 +10,16 @@ namespace ErrorCodes
 }
 
 /// Step which has single input and single output data stream.
+/// 具有单个输入和单个输出数据流的步骤。
 /// It doesn't mean that pipeline has single port before or after such step.
+/// 它不意味着管道在步骤之前或之后有单个端口。
 class ITransformingStep : public IQueryPlanStep
 {
 public:
     /// This flags are used to automatically set properties for output stream.
+    /// 这些标志用于自动设置输出流属性。
     /// They are specified in constructor and cannot be changed.
+    /// 它们在构造函数中指定，不能更改。
     struct DataStreamTraits
     {
         /// True if pipeline has single output port after this step.

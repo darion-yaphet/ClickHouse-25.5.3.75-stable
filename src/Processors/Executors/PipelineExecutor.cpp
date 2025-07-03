@@ -55,6 +55,7 @@ PipelineExecutor::PipelineExecutor(std::shared_ptr<Processors> & processors, Que
         profile_processors = process_list_element->getContext()->getSettingsRef()[Setting::log_processors_profiles];
         trace_processors = process_list_element->getContext()->getSettingsRef()[Setting::opentelemetry_trace_processors];
     }
+
     try
     {
         graph = std::make_unique<ExecutingGraph>(processors, profile_processors);
@@ -63,6 +64,8 @@ PipelineExecutor::PipelineExecutor(std::shared_ptr<Processors> & processors, Que
     {
         /// If exception was thrown while pipeline initialization, it means that query pipeline was not build correctly.
         /// It is logical error, and we need more information about pipeline.
+        /// 如果异常在管道初始化期间抛出，则意味着查询管道没有正确构建。
+        /// 这是一个逻辑错误，我们需要更多关于管道的信息。
         WriteBufferFromOwnString buf;
         printPipeline(*processors, buf);
         buf.finalize();
@@ -132,11 +135,13 @@ void PipelineExecutor::execute(size_t num_threads, bool concurrency_control)
         executeImpl(num_threads, concurrency_control);
 
         /// Log all of the LOGICAL_ERROR exceptions.
+        /// 记录所有LOGICAL_ERROR异常。
         for (auto & node : graph->nodes)
             if (node->exception && getExceptionErrorCode(node->exception) == ErrorCodes::LOGICAL_ERROR)
                 tryLogException(node->exception, log);
 
         /// Rethrow the first exception.
+        /// 重新抛出第一个异常。
         for (auto & node : graph->nodes)
             if (node->exception)
                 std::rethrow_exception(node->exception);

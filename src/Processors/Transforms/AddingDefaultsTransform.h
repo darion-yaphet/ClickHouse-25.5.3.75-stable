@@ -10,6 +10,7 @@ namespace DB
 class IInputFormat;
 
 /// Adds defaults to columns using BlockDelayedDefaults bitmask attached to Block by child InputStream.
+/// 使用BlockDelayedDefaults位掩码附加到Block的子InputStream上，添加默认值到列中。
 class AddingDefaultsTransform : public ISimpleTransform
 {
 public:

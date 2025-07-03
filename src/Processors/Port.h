@@ -69,19 +69,28 @@ protected:
 
         /// Flags for Port state.
         /// Will store them in least pointer bits.
+        /// 将标志存储在最低指针位中。
 
         /// Port was set finished or closed.
+        /// 端口被设置为已结束或关闭。
         static constexpr std::uintptr_t IS_FINISHED = 1;
+
         /// Block is not needed right now, but may be will be needed later.
         /// This allows to pause calculations if we are not sure that we need more data.
+        /// 块现在不需要，但以后可能需要。
+        /// 这允许在不确定是否需要更多数据时暂停计算。
         static constexpr std::uintptr_t IS_NEEDED = 2;
+
         /// Check if port has data.
+        /// 检查端口是否有数据。
         static constexpr std::uintptr_t HAS_DATA = 4;
 
+        /// 掩码用于屏蔽标志。
         static constexpr std::uintptr_t FLAGS_MASK = IS_FINISHED | IS_NEEDED | HAS_DATA;
         static constexpr std::uintptr_t PTR_MASK = ~FLAGS_MASK;
 
         /// Tiny smart ptr class for Data. Takes into account that ptr can have flags in least bits.
+        /// 一个智能指针类，用于Data。考虑到指针可能具有最低位中的标志。
         class DataPtr
         {
         public:
@@ -91,8 +100,10 @@ protected:
                     throw Exception(ErrorCodes::LOGICAL_ERROR, "Not alignment memory for Port");
             }
             /// Pointer can store flags in case of exception in swap.
+            /// 指针可以在交换时存储标志。
             ~DataPtr() { delete getPtr(getUInt(data) & PTR_MASK); }
 
+            /// 复制构造函数。
             DataPtr(DataPtr const &) : data(new Data()) {}
             DataPtr& operator=(DataPtr const &) = delete;
 
@@ -109,6 +120,7 @@ protected:
                 return result;
             }
 
+            /// 交换数据。
             uintptr_t ALWAYS_INLINE swap(std::atomic<Data *> & value, std::uintptr_t flags, std::uintptr_t mask) /// NOLINT
             {
                 Data * expected = nullptr;
@@ -129,12 +141,14 @@ protected:
         };
 
         /// Not finished, not needed, has not data.
+        /// 未完成，不需要，没有数据。
         State() : data(new Data())
         {
             if (unlikely((getUInt(data) & FLAGS_MASK) != 0))
                 throw Exception(ErrorCodes::LOGICAL_ERROR, "Not alignment memory for Port");
         }
 
+        /// 析构函数。
         ~State()
         {
             Data * desired = nullptr;
@@ -146,6 +160,7 @@ protected:
             delete expected;
         }
 
+        /// 推入数据。
         void ALWAYS_INLINE push(DataPtr & data_, std::uintptr_t & flags)
         {
             flags = data_.swap(data, HAS_DATA, HAS_DATA);
@@ -153,15 +168,23 @@ protected:
             /// It's possible to push data into finished port. Will just ignore it.
             /// if (flags & IS_FINISHED)
             ///    throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot push block to finished port.");
+            /// 可以推入已结束的端口。将忽略它。
+            /// 如果(flags & IS_FINISHED)
+            ///    throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot push block to finished port.");
 
             /// It's possible to push data into port which is not needed now.
             /// if ((flags & IS_NEEDED) == 0)
             ///    throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot push block to port which is not needed.");
+            /// 可以推入不需要的端口。将忽略它。
+            /// 如果((flags & IS_NEEDED) == 0)
+            ///    throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot push block to port which is not needed.");
 
+            /// 如果端口已经有数据，则抛出异常。
             if (unlikely(flags & HAS_DATA))
                 throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot push block to port which already has data");
         }
 
+        /// 拉取数据。
         void ALWAYS_INLINE pull(DataPtr & data_, std::uintptr_t & flags, bool set_not_needed = false)
         {
             uintptr_t mask = HAS_DATA;
@@ -179,6 +202,7 @@ protected:
                 throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot pull block from port which has no data");
         }
 
+        /// 设置标志。
         std::uintptr_t ALWAYS_INLINE setFlags(std::uintptr_t flags, std::uintptr_t mask)
         {
             Data * expected = nullptr;
@@ -190,6 +214,7 @@ protected:
             return getUInt(expected) & FLAGS_MASK;
         }
 
+        /// 获取标志。
         std::uintptr_t ALWAYS_INLINE getFlags() const
         {
             return getUInt(data.load()) & FLAGS_MASK;

@@ -134,9 +134,11 @@ void ExecutorTasks::tryGetTask(ExecutionThreadContext & context)
 void ExecutorTasks::pushTasks(Queue & queue, Queue & async_queue, ExecutionThreadContext & context)
 {
     /// Take local task from queue if has one.
+    /// 从队列中获取本地任务，如果队列不为空，并且没有快速任务，并且本地任务数小于最大本地任务数，则获取本地任务。
     if (!queue.empty() && !has_fast_tasks.load(std::memory_order_relaxed)
         && context.num_scheduled_local_tasks < ExecutionThreadContext::max_scheduled_local_tasks)
     {
+        /// 增加本地任务数。
         ++context.num_scheduled_local_tasks;
         context.setTask(queue.front());
         queue.pop();
@@ -204,6 +206,7 @@ void ExecutorTasks::fill(Queue & queue, [[maybe_unused]] Queue & async_queue)
         ++next_thread;
 
         /// It is important to keep queues empty for threads that are not started yet.
+        /// 
         /// Otherwise that thread can be selected by `tryWakeUpAnyOtherThreadWithTasks()`, leading to deadlock.
         if (next_thread >= use_threads)
             next_thread = 0;
