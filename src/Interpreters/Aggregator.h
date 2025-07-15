@@ -57,16 +57,27 @@ using GroupingSetsParamsList = std::vector<GroupingSetsParams>;
   * (For more details, see TotalsHavingTransform.)
   *
   * In the absence of group_by_overflow_mode = 'any', the data is aggregated as usual, but the states of the aggregate functions are not finalized.
+  * 在没有 group_by_overflow_mode = 'any' 的情况下，数据通常会被聚合，但聚合函数的状态不会被最终化。
+  *
   * Later, the aggregate function states for all rows (passed through HAVING) are merged into one - this will be TOTALS.
+  * 然后，所有行（通过 HAVING）的聚合函数状态被合并为一个 - 这就是 TOTALS。
   *
   * If there is group_by_overflow_mode = 'any', the data is aggregated as usual, except for the keys that did not fit in max_rows_to_group_by.
+  * 如果存在 group_by_overflow_mode = 'any'，数据通常会被聚合，但聚合函数的状态不会被最终化。
+  *
   * For these keys, the data is aggregated into one additional row - see below under the names `overflow_row`, `overflows`...
+  * 对于这些键，数据被聚合到一个额外的行中 - 请参阅下面关于名称 `overflow_row`、`overflows`...的部分。
+  *
   * Later, the aggregate function states for all rows (passed through HAVING) are merged into one,
   *  also overflow_row is added or not added (depending on the totals_mode setting) also - this will be TOTALS.
+  *
+  * 最后，所有行（通过 HAVING）的聚合函数状态被合并为一个，
+  * 也添加或不添加 overflow_row（取决于 totals_mode 设置） - 这就是 TOTALS。
   */
 
 
 /** Aggregates the source of the blocks.
+  * 聚合源块。
   */
 class Aggregator final
 {
@@ -87,16 +98,23 @@ public:
 
         ///
         /// The settings of approximate calculation of GROUP BY.
+        /// 近似计算 GROUP BY 的设置。
         ///
         /// Do we need to put into AggregatedDataVariants::without_key aggregates for keys that are not in max_rows_to_group_by.
+        /// 是否需要将不在 max_rows_to_group_by 中的键的聚合函数状态放入 AggregatedDataVariants::without_key。
         const bool overflow_row = false;
         const size_t max_rows_to_group_by = 0;
         const OverflowMode group_by_overflow_mode = OverflowMode::THROW;
 
         /// Two-level aggregation settings (used for a large number of keys).
+        /// 两级聚合设置（用于大量键）。
+        ///
         /// With how many keys or the size of the aggregation state in bytes,
         /// two-level aggregation begins to be used. Enough to reach of at least one of the thresholds.
+        /// 当键的数量或聚合状态的大小达到至少一个阈值时，开始使用两级聚合。
+        /// 
         /// 0 - the corresponding threshold is not specified.
+        /// 0 - 对应的阈值未指定。
         size_t group_by_two_level_threshold = 0;
         size_t group_by_two_level_threshold_bytes = 0;
 
@@ -176,12 +194,14 @@ public:
     explicit Aggregator(const Block & header_, const Params & params_);
 
     /// Process one block. Return false if the processing should be aborted (with group_by_overflow_mode = 'break').
+    /// 处理一个块。如果处理应该被中止（group_by_overflow_mode = 'break'），则返回 false。
     bool executeOnBlock(const Block & block,
         AggregatedDataVariants & result,
         ColumnRawPtrs & key_columns,
         AggregateColumns & aggregate_columns, /// Passed to not create them anew for each block
         bool & no_more_keys) const;
 
+    /// 处理一个块。如果处理应该被中止（group_by_overflow_mode = 'break'），则返回 false。
     bool executeOnBlock(Columns columns,
         size_t row_begin, size_t row_end,
         AggregatedDataVariants & result,
@@ -244,7 +264,10 @@ public:
         std::atomic<bool> & is_cancelled) const;
 
     /** Convert the aggregation data structure into a block.
+      * 将聚合数据结构转换为块。
+      *
       * If overflow_row = true, then aggregates for rows that are not included in max_rows_to_group_by are put in the first block.
+      * 如果 overflow_row = true，则将不在 max_rows_to_group_by 中的行的聚合函数状态放入第一个块。
       *
       * If final = false, then ColumnAggregateFunction is created as the aggregation columns with the state of the calculations,
       *  which can then be combined with other states (for distributed query processing).
@@ -340,12 +363,16 @@ private:
     AggregatedDataVariants::Type chooseAggregationMethod();
 
     /** Create states of aggregate functions for one key.
+      * 创建一个键的聚合函数状态。
       */
     template <bool skip_compiled_aggregate_functions = false>
     void createAggregateStates(AggregateDataPtr & aggregate_data) const;
 
     /** Call `destroy` methods for states of aggregate functions.
+      * 调用 `destroy` 方法来销毁聚合函数的状态。
+      *
       * Used in the exception handler for aggregation, since RAII in this case is not applicable.
+      * 在聚合的异常处理中使用，因为在这种情况下 RAII 不适用。
       */
     void destroyAllAggregateStates(AggregatedDataVariants & result) const;
 

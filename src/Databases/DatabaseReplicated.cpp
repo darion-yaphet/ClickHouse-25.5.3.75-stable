@@ -82,6 +82,7 @@ namespace DatabaseReplicatedSetting
     extern const DatabaseReplicatedSettingsFloat max_broken_tables_ratio;
 }
 
+// 错误码
 namespace ErrorCodes
 {
     extern const int NO_ZOOKEEPER;
@@ -113,17 +114,20 @@ static constexpr const char * BROKEN_TABLES_SUFFIX = "_broken_tables";
 static constexpr const char * BROKEN_REPLICATED_TABLES_SUFFIX = "_broken_replicated_tables";
 static constexpr const char * FIRST_REPLICA_DATABASE_NAME = "first_replica_database_name";
 
+// 获取 ZooKeeper 实例
 zkutil::ZooKeeperPtr DatabaseReplicated::getZooKeeper() const
 {
     return getContext()->getZooKeeper();
 }
 
+// 获取主机 ID
 static inline String getHostID(ContextPtr global_context, const UUID & db_uuid, bool secure)
 {
     UInt16 port = secure ? global_context->getTCPPortSecure().value_or(DBMS_DEFAULT_SECURE_PORT) : global_context->getTCPPort();
     return Cluster::Address::toString(getFQDNOrHostName(), port) + ':' + toString(db_uuid);
 }
 
+// 获取元数据哈希
 static inline UInt64 getMetadataHash(const String & table_name, const String & metadata)
 {
     SipHash hash;
@@ -132,8 +136,10 @@ static inline UInt64 getMetadataHash(const String & table_name, const String & m
     return hash.get64();
 }
 
+// 析构函数
 DatabaseReplicated::~DatabaseReplicated() = default;
 
+// 构造函数
 DatabaseReplicated::DatabaseReplicated(
     const String & name_,
     const String & metadata_path_,
@@ -152,8 +158,10 @@ DatabaseReplicated::DatabaseReplicated(
 {
     if (zookeeper_path.empty() || shard_name.empty() || replica_name.empty())
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "ZooKeeper path, shard and replica names must be non-empty");
+
     if (shard_name.contains('/') || replica_name.contains('/'))
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Shard and replica names should not contain '/'");
+    
     if (shard_name.contains('|') || replica_name.contains('|'))
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Shard and replica names should not contain '|'");
 
@@ -179,16 +187,19 @@ DatabaseReplicated::DatabaseReplicated(
     }
 }
 
+// 获取完整副本名称
 String DatabaseReplicated::getFullReplicaName(const String & shard, const String & replica)
 {
     return shard + '|' + replica;
 }
 
+// 获取完整副本名称
 String DatabaseReplicated::getFullReplicaName() const
 {
     return getFullReplicaName(shard_name, replica_name);
 }
 
+// 解析完整副本名称
 std::pair<String, String> DatabaseReplicated::parseFullReplicaName(const String & name)
 {
     String shard;
@@ -201,6 +212,7 @@ std::pair<String, String> DatabaseReplicated::parseFullReplicaName(const String 
     return {shard, replica};
 }
 
+// 尝试获取集群
 ClusterPtr DatabaseReplicated::tryGetCluster() const
 {
     std::lock_guard lock{mutex};
@@ -208,17 +220,22 @@ ClusterPtr DatabaseReplicated::tryGetCluster() const
         return cluster;
 
     /// Database is probably not created or not initialized yet, it's ok to return nullptr
+    /// 数据库可能还没有创建或初始化，返回 nullptr 是正常的
     if (is_readonly)
         return cluster;
 
     try
     {
-        /// A quick fix for stateless tests with DatabaseReplicated. Its ZK
-        /// node can be destroyed at any time. If another test lists
-        /// system.clusters to get client command line suggestions, it will
+        /// A quick fix for stateless tests with DatabaseReplicated.
+        /// 使用DatabaseReplicated快速修复无状态测试。
+        /// Its ZK node can be destroyed at any time. 
+        /// 针对无状态测试的快速修复，其 ZK 节点可以在任何时间被销毁。
+        /// If another test lists system.clusters to get client command line suggestions, it will
         /// get an error when trying to get the info about DB from ZK.
+        /// 如果另一个测试列出 system.clusters 以获取客户端命令行建议，在尝试从 ZK 获取数据库信息时，会出错。
         /// Just ignore these inaccessible databases. A good example of a
         /// failing test is `01526_client_start_and_exit`.
+        /// 只需忽略这些不可访问的数据库。一个失败的测试示例是 `01526_client_start_and_exit`。
         cluster = getClusterImpl();
     }
     catch (...)
@@ -1176,8 +1193,13 @@ void DatabaseReplicated::recoverLostReplica(const ZooKeeperPtr & current_zookeep
 
     /// Let's compare local (possibly outdated) metadata with (most actual) metadata stored in ZooKeeper
     /// and try to update the set of local tables.
+    /// 让我们将本地（可能过时的）元数据与（最新）存储在 ZooKeeper 中的元数据进行比较，并尝试更新本地表集。
+    /// 
     /// We could drop all local tables and create the new ones just like it's new replica.
+    /// 我们可以删除所有本地表并像新副本一样创建新表。
+    /// 
     /// But it will cause all ReplicatedMergeTree tables to fetch all data parts again and data in other tables will be lost.
+    /// 但是这会导致所有 ReplicatedMergeTree 表重新获取所有数据部分，并且其他表中的数据将丢失。
 
     bool new_replica = our_log_ptr == 0;
     if (new_replica)
@@ -1188,9 +1210,13 @@ void DatabaseReplicated::recoverLostReplica(const ZooKeeperPtr & current_zookeep
     auto table_name_to_metadata = tryGetConsistentMetadataSnapshot(current_zookeeper, max_log_ptr);
 
     /// For ReplicatedMergeTree tables we can compare only UUIDs to ensure that it's the same table.
+    /// 对于 ReplicatedMergeTree 表，我们只能比较 UUID 来确保它是同一个表。
     /// Metadata can be different, it's handled on table replication level.
+    /// 元数据可能不同，它会在表复制级别处理。
     /// We need to handle renamed tables only.
+    /// 我们只需要处理重命名表。
     /// TODO maybe we should also update MergeTree SETTINGS if required?
+    /// 也许我们应该在需要时更新 MergeTree SETTINGS？
     std::unordered_map<UUID, String> zk_replicated_id_to_name;
     for (const auto & zk_table : table_name_to_metadata)
     {
@@ -1200,6 +1226,7 @@ void DatabaseReplicated::recoverLostReplica(const ZooKeeperPtr & current_zookeep
     }
 
     /// We will drop or move tables which exist only in local metadata
+    /// 我们将删除或移动仅存在于本地元数据中的表
     Strings tables_to_detach;
 
     struct RenameEdge
@@ -1210,6 +1237,9 @@ void DatabaseReplicated::recoverLostReplica(const ZooKeeperPtr & current_zookeep
     };
 
     /// This is needed to generate intermediate name
+    /// 需要生成一个中间表名
+
+    /// 我们这里会生成一个随机数，用于生成中间表名
     String salt = toString(thread_local_rng());
 
     std::vector<RenameEdge> replicated_tables_to_rename;
@@ -1261,16 +1291,22 @@ void DatabaseReplicated::recoverLostReplica(const ZooKeeperPtr & current_zookeep
         query_context->setCurrentQueryId("");
 
         /// We will execute some CREATE queries for recovery (not ATTACH queries),
+        /// 我们这里会执行一些 CREATE 查询用于恢复（不是 ATTACH 查询），
         /// so we need to allow experimental features that can be used in a CREATE query
+        /// 所以我们需要允许在 CREATE 查询中使用实验性功能
         enableAllExperimentalSettings(query_context);
 
         query_context->setSetting("database_replicated_allow_explicit_uuid", 3);
         query_context->setSetting("database_replicated_allow_replicated_engine_arguments", 3);
 
         /// We apply the flatten_nested setting after writing the CREATE query to the DDL log,
+        /// 我们在将 CREATE 查询写入 DDL 日志后应用 flatten_nested 设置，
         /// but before writing metadata to ZooKeeper. So we have to apply the setting on secondary replicas, but not in recovery mode.
+        /// 但在将元数据写入 ZooKeeper 之前应用。因此，我们必须在二级副本上应用该设置，但在恢复模式下不应用。
         /// Set it to false, so it will do nothing on recovery. The metadata in ZooKeeper should be used as is.
+        /// 将其设置为 false，这样在恢复模式下它将什么都不做。ZooKeeper 中的元数据应该被原样使用。
         /// Same for data_type_default_nullable.
+        /// 同样适用于 data_type_default_nullable。
         query_context->setSetting("flatten_nested", false);
         query_context->setSetting("data_type_default_nullable", false);
 

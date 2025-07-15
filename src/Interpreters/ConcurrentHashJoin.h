@@ -17,17 +17,29 @@ struct SelectQueryInfo;
 
 /**
  * The default `HashJoin` is not thread-safe for inserting the right table's rows; thus, it is done on a single thread.
+ * 默认的 `HashJoin` 对于插入右表的行不是线程安全的，因此它是在单个线程上完成的。
+ *
  * When the right table is large, the join process is too slow.
+ * 当右表很大时，连接过程太慢。
  *
  * `ConcurrentHashJoin` can run `addBlockToJoin()` concurrently to speed up the join process. On the test, it scales almost linearly.
+ * 为了加速连接过程，`ConcurrentHashJoin` 可以并发地运行 `addBlockToJoin()`。在测试中，它几乎线性扩展。
+ *
  * For that, we create multiple `HashJoin` instances. In `addBlockToJoin()`, one input block is split into multiple blocks
- * corresponding to the `HashJoin` instances by hashing every row on the join keys. In particular, each `HashJoin` instance has its own hash map
- * that stores a unique set of keys. Also, `addBlockToJoin()` calls are done under mutex to guarantee
- * that every `HashJoin` instance is written only from one thread at a time.
+ * corresponding to the `HashJoin` instances by hashing every row on the join keys. 
+ * 为了加速连接过程，我们创建了多个 `HashJoin` 实例。在 `addBlockToJoin()` 中，一个输入块被拆分为多个块，
+ * 每个块对应一个 `HashJoin` 实例，通过哈希每个连接键的行。
+ *
+ * In particular, each `HashJoin` instance has its own hash map that stores a unique set of keys. Also, 
+ * `addBlockToJoin()` calls are done under mutex to guarantee that every `HashJoin` instance is written only from one thread at a time.
+ *
+ * 具体来说，每个 `HashJoin` 实例都有自己的哈希映射，存储唯一的键集。此外，`addBlockToJoin()` 调用是在互斥锁下完成的，
+ * 以保证每个 `HashJoin` 实例只能从单个线程写入。
  *
  * When matching the left table, the input blocks are also split by hash and routed to corresponding `HashJoin` instances.
- * This introduces some noticeable overhead compared to the `hash` join algorithm that doesn't have to split. Then,
- * we introduced the following optimization. On the probe stage, we want to have the same execution as for the `hash` join algorithm,
+ * This introduces some noticeable overhead compared to the `hash` join algorithm that doesn't have to split. 
+ *
+ * Then, we introduced the following optimization. On the probe stage, we want to have the same execution as for the `hash` join algorithm,
  * i.e., we want to have a single shared hash map that we will read from each thread. No splitting of blocks is required.
  * We should somehow divide this shared hash map between threads so that we can still execute the build stage concurrently.
  * The idea is to use a two-level hash map and distribute its buckets between threads. Namely, we will calculate the same hash
@@ -109,6 +121,7 @@ private:
 };
 
 // The following two methods are deprecated and hopefully will be removed in the future.
+// 以下两个方法已弃用，希望在未来被移除。
 IQueryTreeNode::HashState preCalculateCacheKey(const QueryTreeNodePtr & right_table_expression, const SelectQueryInfo & select_query_info);
 UInt64 calculateCacheKey(std::shared_ptr<TableJoin> & table_join, IQueryTreeNode::HashState hash);
 }

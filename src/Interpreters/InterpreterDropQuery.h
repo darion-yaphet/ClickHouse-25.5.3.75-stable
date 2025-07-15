@@ -15,6 +15,9 @@ class AccessRightsElements;
 /** Allow to either drop table with all its data (DROP),
   * or remove information about table (just forget) from server (DETACH),
   * or just clear all data in table (TRUNCATE).
+  * 允许删除表及其所有数据（DROP），
+  * 或从服务器中删除表信息（DETACH），
+  * 或仅清除表中的所有数据（TRUNCATE）。
   */
 class InterpreterDropQuery : public IInterpreter, WithMutableContext
 {
@@ -22,6 +25,7 @@ public:
     InterpreterDropQuery(const ASTPtr & query_ptr_, ContextMutablePtr context_);
 
     /// Drop table or database.
+    /// 删除表或数据库。
     BlockIO execute() override;
 
     static void executeDropQuery(ASTDropQuery::Kind kind, ContextPtr global_context, ContextPtr current_context,

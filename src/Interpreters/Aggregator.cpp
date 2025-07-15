@@ -41,6 +41,7 @@
 #include <Common/threadPoolCallbackRunner.h>
 #include <Common/typeid_cast.h>
 
+/// 聚合器事件
 namespace ProfileEvents
 {
     extern const Event ExternalAggregationWritePart;
@@ -55,6 +56,7 @@ namespace ProfileEvents
     extern const Event AggregationOptimizedEqualRangesOfKeys;
 }
 
+/// 当前指标
 namespace CurrentMetrics
 {
     extern const Metric TemporaryFilesForAggregation;
@@ -80,10 +82,13 @@ namespace ErrorCodes
 
 namespace
 {
+
+/// 是否值得转换为两级聚合
 bool worthConvertToTwoLevel(
     size_t group_by_two_level_threshold, size_t result_size, size_t group_by_two_level_threshold_bytes, auto result_size_bytes)
 {
     // params.group_by_two_level_threshold will be equal to 0 if we have only one thread to execute aggregation (refer to AggregatingStep::transformPipeline).
+    /// 如果只有一个线程执行聚合（参考 AggregatingStep::transformPipeline），则 group_by_two_level_threshold 将为 0。
     return (group_by_two_level_threshold && result_size >= group_by_two_level_threshold)
         || (group_by_two_level_threshold_bytes && result_size_bytes >= static_cast<Int64>(group_by_two_level_threshold_bytes));
 }
@@ -127,6 +132,7 @@ void initDataVariantsWithSizeHint(
 }
 
 /// Collection and use of the statistics should be enabled.
+/// 收集和使用统计信息应该被启用。
 void updateStatistics(const DB::ManyAggregatedDataVariants & data_variants, const DB::StatsCollectingParams & params)
 {
     if (!params.isCollectionAndUseEnabled())
@@ -141,6 +147,7 @@ void updateStatistics(const DB::ManyAggregatedDataVariants & data_variants, cons
     DB::getHashTablesStatistics<DB::AggregationEntry>().update({.sum_of_sizes = sum_of_sizes, .median_size = *median_size}, params);
 }
 
+/// 计算键的位置
 DB::ColumnNumbers calculateKeysPositions(const DB::Block & header, const DB::Aggregator::Params & params)
 {
     DB::ColumnNumbers keys_positions(params.keys_size);
@@ -155,6 +162,7 @@ concept HasPrefetchMemberFunc = requires
     {std::declval<HashTable>().prefetch(std::declval<KeyHolder>())};
 };
 
+/// 获取最小字节数用于预取
 size_t getMinBytesForPrefetch()
 {
     size_t l2_size = 0;
@@ -173,11 +181,13 @@ size_t getMinBytesForPrefetch()
 namespace DB
 {
 
+/// 获取聚合结果的块头
 Block Aggregator::getHeader(bool final) const
 {
     return params.getHeader(header, final);
 }
 
+/// 聚合器参数构造函数
 Aggregator::Params::Params(
     const Names & keys_,
     const AggregateDescriptions & aggregates_,
@@ -224,6 +234,7 @@ Aggregator::Params::Params(
 {
 }
 
+/// 获取最大字节数用于外部聚合
 size_t Aggregator::Params::getMaxBytesBeforeExternalGroupBy(size_t max_bytes_before_external_group_by, double max_bytes_ratio_before_external_group_by)
 {
     std::optional<size_t> threshold;
@@ -259,6 +270,7 @@ size_t Aggregator::Params::getMaxBytesBeforeExternalGroupBy(size_t max_bytes_bef
     return threshold.value_or(0);
 }
 
+/// 聚合器参数构造函数
 Aggregator::Params::Params(
     const Names & keys_,
     const AggregateDescriptions & aggregates_,
@@ -278,6 +290,7 @@ Aggregator::Params::Params(
 {
 }
 
+/// 获取聚合结果的块头
 Block Aggregator::Params::getHeader(
     const Block & header, bool only_merge, const Names & keys, const AggregateDescriptions & aggregates, bool final)
 {
@@ -331,6 +344,7 @@ Block Aggregator::Params::getHeader(
     return materializeBlock(res);
 }
 
+/// 获取原始键列
 ColumnRawPtrs Aggregator::Params::makeRawKeyColumns(const Block & block) const
 {
     ColumnRawPtrs key_columns(keys_size);
@@ -351,6 +365,7 @@ ColumnRawPtrs Aggregator::Params::makeRawKeyColumns(const Block & block) const
     return key_columns;
 }
 
+/// 获取聚合列的常量数据
 Aggregator::AggregateColumnsConstData Aggregator::Params::makeAggregateColumnsData(const Block & block) const
 {
     AggregateColumnsConstData aggregate_columns(aggregates_size);
@@ -364,6 +379,7 @@ Aggregator::AggregateColumnsConstData Aggregator::Params::makeAggregateColumnsDa
     return aggregate_columns;
 }
 
+/// 解释聚合器参数
 void Aggregator::Params::explain(WriteBuffer & out, size_t indent) const
 {
     String prefix(indent, ' ');
@@ -395,6 +411,7 @@ void Aggregator::Params::explain(WriteBuffer & out, size_t indent) const
     }
 }
 
+/// 解释聚合器参数
 void Aggregator::Params::explain(JSONBuilder::JSONMap & map) const
 {
     auto keys_array = std::make_unique<JSONBuilder::JSONArray>();
@@ -427,6 +444,7 @@ static CHJIT & getJITInstance()
     return jit;
 }
 
+/// 编译的聚合函数持有者
 class CompiledAggregateFunctionsHolder final : public CompiledExpressionCacheEntry
 {
 public:
@@ -445,6 +463,7 @@ public:
 
 #endif
 
+/// 聚合器构造函数
 Aggregator::Aggregator(const Block & header_, const Params & params_)
     : header(header_)
     , keys_positions(calculateKeysPositions(header, params_))
@@ -510,6 +529,7 @@ Aggregator::Aggregator(const Block & header_, const Params & params_)
 
 #if USE_EMBEDDED_COMPILER
 
+/// 编译聚合函数
 void Aggregator::compileAggregateFunctionsIfNeeded()
 {
     static std::unordered_map<UInt128, UInt64, UInt128Hash> aggregate_functions_description_to_count;

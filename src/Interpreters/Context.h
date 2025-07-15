@@ -226,16 +226,22 @@ using ZooKeeperMetadataTransactionPtr = std::shared_ptr<ZooKeeperMetadataTransac
 class AsynchronousInsertQueue;
 
 /// Callback for external tables initializer
+/// 外部表初始化器回调
 using ExternalTablesInitializer = std::function<void(ContextPtr)>;
 
 /// Callback for initialize input()
+/// 输入初始化器回调
 using InputInitializer = std::function<void(ContextPtr, const StoragePtr &)>;
+
 /// Callback for reading blocks of data from client for function input()
+/// 从客户端读取数据块的回调
 using InputBlocksReader = std::function<Block(ContextPtr)>;
 
 /// Used in distributed task processing
+/// 在分布式任务处理中使用
 using ReadTaskCallback = std::function<String()>;
 
+/// 合并树所有范围回调
 using MergeTreeAllRangesCallback = std::function<void(InitialAllRangesAnnouncement)>;
 using MergeTreeReadTaskCallback = std::function<std::optional<ParallelReadResponse>(ParallelReadRequest)>;
 
@@ -257,6 +263,7 @@ struct ServerSettings;
 
 /// An empty interface for an arbitrary object that may be attached by a shared pointer
 /// to query context, when using ClickHouse as a library.
+/// 当使用 ClickHouse 作为库时，可以附加到查询上下文的任意对象的空接口。
 struct IHostContext
 {
     virtual ~IHostContext() = default;
@@ -265,7 +272,9 @@ struct IHostContext
 using IHostContextPtr = std::shared_ptr<IHostContext>;
 
 /// A small class which owns ContextShared.
+/// 拥有 ContextShared 的小类。
 /// We don't use something like unique_ptr directly to allow ContextShared type to be incomplete.
+/// 我们不直接使用类似 unique_ptr 的东西，以允许 ContextShared 类型不完整。
 struct SharedContextHolder
 {
     ~SharedContextHolder();
@@ -282,6 +291,7 @@ private:
     std::unique_ptr<ContextSharedPart> shared;
 };
 
+/// 上下文共享互斥锁
 class ContextSharedMutex : public SharedMutexHelper<ContextSharedMutex>
 {
 private:
@@ -293,6 +303,7 @@ private:
     void lockSharedImpl();
 };
 
+/// 上下文数据
 class ContextData
 {
 protected:
@@ -360,6 +371,7 @@ protected:
 
 public:
     /// Record entities accessed by current query, and store this information in system.query_log.
+    /// 记录当前查询访问的实体，并将其信息存储在 system.query_log 中。
     struct QueryAccessInfo
     {
         QueryAccessInfo() = default;
@@ -396,6 +408,7 @@ public:
         }
 
         /// To prevent a race between copy-constructor and other uses of this structure.
+        /// 防止在复制构造函数和其他使用此结构时发生竞争。
         mutable std::mutex mutex{};
         std::set<std::string> databases TSA_GUARDED_BY(mutex){};
         std::set<std::string> tables TSA_GUARDED_BY(mutex){};
@@ -409,14 +422,18 @@ public:
 protected:
     /// In some situations, we want to be able to transfer the access info from children back to parents (e.g. definers context).
     /// Therefore, query_access_info must be a pointer.
+    /// 在某些情况下，我们希望能够在子级和父级之间传递访问信息（例如定义者上下文）。
+    /// 因此，query_access_info 必须是指针。
     QueryAccessInfoPtr query_access_info;
 
 public:
     /// Record names of created objects of factories (for testing, etc)
+    /// 记录工厂创建的对象的名称（用于测试等）
     struct QueryFactoriesInfo
     {
         QueryFactoriesInfo() = default;
 
+        /// 复制构造函数
         QueryFactoriesInfo(const QueryFactoriesInfo & rhs)
         {
             std::lock_guard<std::mutex> lock(rhs.mutex);
@@ -431,6 +448,7 @@ public:
             table_functions = rhs.table_functions;
         }
 
+        /// 移动构造函数
         QueryFactoriesInfo(QueryFactoriesInfo && rhs) = delete;
 
         std::unordered_set<std::string> aggregate_functions TSA_GUARDED_BY(mutex);
@@ -469,9 +487,12 @@ public:
 
 protected:
     /// Needs to be changed while having const context in factories methods
+    /// 在拥有 const 上下文时需要更改
     mutable QueryFactoriesInfo query_factories_info;
     QueryPrivilegesInfoPtr query_privileges_info;
+
     /// Query metrics for reading data asynchronously with IAsynchronousReader.
+    /// 异步读取数据的查询指标
     mutable std::shared_ptr<AsyncReadCounters> async_read_counters;
 
     /// TODO: maybe replace with temporary tables?
@@ -483,6 +504,7 @@ protected:
     ContextWeakMutablePtr global_context;   /// Global context. Could be equal to this.
 
     /// XXX: move this stuff to shared part instead.
+    /// 缓冲区上下文
     ContextMutablePtr buffer_context;  /// Buffer context. Could be equal to this.
 
     /// A flag, used to distinguish between user query and internal query to a database engine (MaterializedPostgreSQL).
@@ -491,14 +513,20 @@ protected:
     inline static ContextPtr global_context_instance;
 
     /// Temporary data for query execution accounting.
+    /// 查询执行期间的临时数据。
     TemporaryDataOnDiskScopePtr temp_data_on_disk;
 
     /// Resource classifier for a query, holds smart pointers required for ResourceLink
+    /// 查询的资源分类器，持有智能指针，用于 ResourceLink
     /// NOTE: all resource links became invalid after `classifier` destruction
+    /// 注意：所有资源链接在 `classifier` 销毁后都失效。
     mutable ClassifierPtr classifier;
 
-    /// Prepared sets that can be shared between different queries. One use case is when is to share prepared sets between
+    /// Prepared sets that can be shared between different queries. 
+    /// One use case is when is to share prepared sets between
     /// mutation tasks of one mutation executed against different parts of the same table.
+    /// 可以共享的预准备集。
+    /// 一个用例是当一个突变执行针对同一个表的不同部分时，共享预准备集。
     PreparedSetsCachePtr prepared_sets_cache;
 
     /// this is a mode of parallel replicas where we set parallel_replicas_count and parallel_replicas_offset
@@ -509,6 +537,8 @@ protected:
 public:
     /// Some counters for current query execution.
     /// Most of them are workarounds and should be removed in the future.
+    /// 一些当前查询执行的计数器。
+    /// 大多数是变通方法，应该在未来删除。
     struct KitchenSink
     {
         std::atomic<size_t> analyze_counter = 0;

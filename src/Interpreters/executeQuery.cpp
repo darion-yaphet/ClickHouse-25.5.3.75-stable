@@ -1299,6 +1299,7 @@ static BlockIO executeQueryImpl(
             }
 
             /// Propagate WITH statement to children ASTSelect.
+            /// 将 WITH 语句传播到子 ASTSelect。
             if (settings[Setting::enable_global_with_statement])
             {
                 ApplyWithGlobalVisitor::visit(out_ast);
@@ -1311,6 +1312,7 @@ static BlockIO executeQueryImpl(
 
             {
                 /// Normalize SelectWithUnionQuery
+                /// 规范化 SelectWithUnionQuery
                 NormalizeSelectWithUnionQueryVisitor::Data data{settings[Setting::union_default_mode]};
                 NormalizeSelectWithUnionQueryVisitor{data}.visit(out_ast);
             }
@@ -1320,6 +1322,7 @@ static BlockIO executeQueryImpl(
         }
 
         /// Put query to process list. But don't put SHOW PROCESSLIST query itself.
+        /// 将查询放入进程列表。但不要放入 SHOW PROCESSLIST 查询本身。
         if (!internal && !(out_ast && out_ast->as<ASTShowProcesslistQuery>()))
         {
             /// processlist also has query masked now, to avoid secrets leaks though SHOW PROCESSLIST by other users.
@@ -1328,6 +1331,7 @@ static BlockIO executeQueryImpl(
         }
 
         /// Load external tables if they were provided
+        /// 如果提供了外部表，则加载它们
         context->initializeExternalTablesIfSet();
         std::shared_ptr<QueryPlanAndSets> query_plan;
         if (stage == QueryProcessingStage::QueryPlan)
@@ -1339,6 +1343,7 @@ static BlockIO executeQueryImpl(
         bool async_insert_enabled = settings[Setting::async_insert];
 
         /// Resolve database before trying to use async insert feature - to properly hash the query.
+        /// 在尝试使用异步插入功能之前，解析数据库 - 以正确哈希查询。
         if (insert_query)
         {
             if (insert_query->table_id)
@@ -1351,9 +1356,11 @@ static BlockIO executeQueryImpl(
                     async_insert_enabled |= table->areAsynchronousInsertsEnabled();
         }
 
+        /// 如果查询是 INSERT SELECT，则准备输入存储。
         if (insert_query && insert_query->select)
         {
             /// Prepare Input storage before executing interpreter if we already got a buffer with data.
+            /// 如果已经获取了数据缓冲区，则准备输入存储。
             if (istr)
             {
                 ASTPtr input_function;
@@ -1372,10 +1379,13 @@ static BlockIO executeQueryImpl(
         else
         {
             /// reset Input callbacks if query is not INSERT SELECT
+            /// 如果查询不是 INSERT SELECT，则重置输入回调。
             context->resetInputCallbacks();
         }
 
+        /// 流本地限制
         StreamLocalLimits limits;
+        /// 共享的配额
         std::shared_ptr<const EnabledQuota> quota;
         std::unique_ptr<IInterpreter> interpreter;
 
@@ -1414,10 +1424,17 @@ static BlockIO executeQueryImpl(
             /// Let's agree on terminology and say that a mini-INSERT is an asynchronous INSERT
             /// which typically contains not a lot of data inside and a big-INSERT in an INSERT
             /// which was formed by concatenating several mini-INSERTs together.
+            /// 让我们同意术语并说一个 mini-INSERT 是一个异步 INSERT，通常包含不多数据，
+            /// 而一个 big-INSERT 是由几个 mini-INSERT 拼接在一起形成的。
+
             /// In case when the client had to retry some mini-INSERTs then they will be properly deduplicated
             /// by the source tables. This functionality is controlled by a setting `async_insert_deduplicate`.
+            /// 如果客户端需要重试一些 mini-INSERT，那么它们将被源表正确地去重。
+            /// 这个功能由设置 `async_insert_deduplicate` 控制。
             /// But then they will be glued together into a block and pushed through a chain of Materialized Views if any.
+            /// 但然后它们将被粘合在一起形成一个块，并通过任何 Materialized Views 的链推送。
             /// The process of forming such blocks is not deterministic so each time we retry mini-INSERTs the resulting
+            /// 形成这些块的过程是不确定的，所以每次重试 mini-INSERT 时，结果块可能被不同地拼接。
             /// block may be concatenated differently.
             /// That's why deduplication in dependent Materialized Views doesn't make sense in presence of async INSERTs.
             if (settings[Setting::throw_if_deduplication_in_dependent_materialized_views_enabled_with_async_insert]
@@ -1629,17 +1646,20 @@ static BlockIO executeQueryImpl(
                         const QueryResultCacheNondeterministicFunctionHandling nondeterministic_function_handling
                             = settings[Setting::query_cache_nondeterministic_function_handling];
                         const QueryResultCacheSystemTableHandling system_table_handling = settings[Setting::query_cache_system_table_handling];
-
+                        
+                        /// 如果查询包含非确定性函数，则抛出异常。
                         if (ast_contains_nondeterministic_functions && nondeterministic_function_handling == QueryResultCacheNondeterministicFunctionHandling::Throw)
                             throw Exception(ErrorCodes::QUERY_CACHE_USED_WITH_NONDETERMINISTIC_FUNCTIONS,
                                 "The query result was not cached because the query contains a non-deterministic function."
                                 " Use setting `query_cache_nondeterministic_function_handling = 'save'` or `= 'ignore'` to cache the query result regardless or to omit caching");
 
+                        /// 如果查询包含系统表，则抛出异常。
                         if (ast_contains_system_tables && system_table_handling == QueryResultCacheSystemTableHandling::Throw)
                             throw Exception(ErrorCodes::QUERY_CACHE_USED_WITH_SYSTEM_TABLE,
                                 "The query result was not cached because the query contains a system table."
                                 " Use setting `query_cache_system_table_handling = 'save'` or `= 'ignore'` to cache the query result regardless or to omit caching");
 
+                        /// 如果查询不包含非确定性函数，则保存查询结果。
                         if ((!ast_contains_nondeterministic_functions || nondeterministic_function_handling == QueryResultCacheNondeterministicFunctionHandling::Save)
                             && (!ast_contains_system_tables || system_table_handling == QueryResultCacheSystemTableHandling::Save))
                         {
@@ -1685,6 +1705,7 @@ static BlockIO executeQueryImpl(
         }
 
         /// Hold element of process list till end of query execution.
+        /// 在查询执行结束时，持有进程列表元素。
         res.process_list_entry = process_list_entry;
 
         if (query_plan)
@@ -1751,8 +1772,10 @@ static BlockIO executeQueryImpl(
                                     query_span](QueryPipeline && query_pipeline, std::chrono::system_clock::time_point finish_time) mutable
             {
                 if (query_result_cache_usage == QueryResultCacheUsage::Write)
-                    /// Trigger the actual write of the buffered query result into the query result cache. This is done explicitly to
-                    /// prevent partial/garbage results in case of exceptions during query execution.
+                    /// Trigger the actual write of the buffered query result into the query result cache.
+                    /// 触发实际的写入缓冲的查询结果到查询结果缓存。
+                    /// This is done explicitly to prevent partial/garbage results in case of exceptions during query execution.
+                    /// 这是显式完成的，以防止在查询执行期间发生异常时出现部分/垃圾结果。
                     query_pipeline.finalizeWriteInQueryResultCache();
 
                 logQueryFinishImpl(elem, context, out_ast, std::move(query_pipeline), pulling_pipeline, query_span, query_result_cache_usage, internal, finish_time);
@@ -1852,7 +1875,9 @@ void executeQuery(
     }
     catch (...)
     {
-        /// If buffer contains invalid data and we failed to decompress, we still want to have some information about the query in the log.
+        /// If buffer contains invalid data and we failed to decompress, 
+        /// we still want to have some information about the query in the log.
+        /// 如果缓冲区包含无效数据，并且我们无法解压缩，我们仍然希望在日志中包含一些关于查询的信息。
         logQuery("<cannot parse>", context, /* internal = */ false, QueryProcessingStage::Complete);
         throw;
     }
@@ -1896,8 +1921,10 @@ void executeQuery(
     };
 
     /// Set the result details in case of any exception raised during query execution
+    /// 在查询执行期间，如果抛出任何异常，则设置结果详细信息。
     SCOPE_EXIT({
         /// Either the result_details have been set in the flow below or the caller of this function does not provide this callback
+        /// 或者在下面的流中设置了 result_details，或者调用此函数的调用者不提供此回调。
         if (!set_result_details)
             return;
 
@@ -1908,9 +1935,12 @@ void executeQuery(
         catch (...)
         {
             /// This exception can be ignored.
+            /// 这个异常可以忽略。
             /// because if the code goes here, it means there's already an exception raised during query execution,
             /// and that exception will be propagated to outer caller,
             /// there's no need to report the exception thrown here.
+            /// 因为如果代码走到这里，意味着在查询执行期间抛出了异常，
+            /// 并且该异常将传播到外部调用者，这里没有必要报告抛出的异常。
         }
     });
 
@@ -2041,25 +2071,30 @@ void executeQuery(
         }
         else if (pipeline.pulling())
         {
+            /// 获取 ASTQueryWithOutput 对象
             const ASTQueryWithOutput * ast_query_with_output = dynamic_cast<const ASTQueryWithOutput *>(ast.get());
             format_name = ast_query_with_output && ast_query_with_output->format_ast != nullptr
                 ? getIdentifierName(ast_query_with_output->format_ast)
                 : context->getDefaultFormat();
 
+            /// 获取输出缓冲区
             WriteBuffer * out_buf = &ostr;
             if (ast_query_with_output && ast_query_with_output->out_file)
             {
+                /// 如果不允许 INTO OUTFILE，则抛出异常
                 if (!allow_into_outfile)
                     throw Exception(ErrorCodes::INTO_OUTFILE_NOT_ALLOWED, "INTO OUTFILE is not allowed");
 
                 const auto & out_file = typeid_cast<const ASTLiteral &>(*ast_query_with_output->out_file).value.safeGet<std::string>();
 
                 std::string compression_method;
+                /// 如果压缩方法不为空，则获取压缩方法
                 if (ast_query_with_output->compression)
                 {
                     const auto & compression_method_node = ast_query_with_output->compression->as<ASTLiteral &>();
                     compression_method = compression_method_node.value.safeGet<std::string>();
                 }
+
                 const auto & settings = context->getSettingsRef();
                 compressed_buffer = wrapWriteBufferWithCompressionMethod(
                     std::make_unique<WriteBufferFromFile>(out_file, DBMS_DEFAULT_BUFFER_SIZE, O_WRONLY | O_EXCL | O_CREAT),
@@ -2078,6 +2113,7 @@ void executeQuery(
             output_format->setAutoFlush();
 
             /// Save previous progress callback if any. TODO Do it more conveniently.
+            /// 保存之前的进度回调（如果有的话）。TODO 更方便地做到这一点。
             auto previous_progress_callback = context->getProgressCallback();
 
             /// NOTE Progress callback takes shared ownership of 'out'.
@@ -2117,6 +2153,7 @@ void executeQuery(
         else
         {
             /// It's possible to have queries without input and output.
+            /// 可能存在没有输入和输出的查询。
         }
     }
     catch (...)

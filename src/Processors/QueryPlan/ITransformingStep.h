@@ -45,6 +45,7 @@ public:
     struct TransformTraits
     {
         /// Won't change the total number of rows.
+        /// 不会改变总行数。
         /// Examples: true for ExpressionStep (without join or array join), false for FilterStep
         bool preserves_number_of_rows;
     };
@@ -62,7 +63,9 @@ public:
     QueryPipelineBuilderPtr updatePipeline(QueryPipelineBuilders pipelines, const BuildQueryPipelineSettings & settings) override;
 
     /// Append processors from the current step to the query pipeline.
+    /// 将当前步骤的处理器添加到查询管道中。
     /// Step always has a single input stream, so we implement updatePipeline over this function.
+    /// 步骤总是有一个输入流，所以我们通过这个函数实现 updatePipeline。
     virtual void transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings & settings) = 0;
 
     const TransformTraits & getTransformTraits() const { return transform_traits; }
@@ -71,7 +74,9 @@ public:
     void describePipeline(FormatSettings & settings) const override;
 
     /// Enforcement is supposed to be done through the special settings that will be taken into account by remote nodes during query planning (e.g. force_aggregation_in_order).
+    /// 强制执行应该通过特殊的设置来完成，这些设置将在查询计划期间由远程节点考虑（例如 force_aggregation_in_order）。
     /// Should be called only if data_stream_traits.can_enforce_sorting_properties_in_distributed_query == true.
+    /// 应该只在 data_stream_traits.can_enforce_sorting_properties_in_distributed_query == true 时调用。
     virtual void adjustSettingsToEnforceSortingPropertiesInDistributedQuery(ContextMutablePtr) const
     {
         throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Not implemented");

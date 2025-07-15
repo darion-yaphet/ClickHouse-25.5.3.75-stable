@@ -78,9 +78,12 @@ BlockIO InterpreterDropQuery::execute()
     return res;
 }
 
+/// 执行单个删除查询。
 BlockIO InterpreterDropQuery::executeSingleDropQuery(const ASTPtr & drop_query_ptr)
 {
     auto & drop = drop_query_ptr->as<ASTDropQuery &>();
+
+    // 如果查询是集群查询，并且有表，并且不是空表，并且不是集群查询，则执行集群查询。
     if (!drop.cluster.empty() && drop.table && !drop.if_empty && !maybeRemoveOnCluster(current_query_ptr, getContext()))
     {
         DDLQueryOnClusterParams params;

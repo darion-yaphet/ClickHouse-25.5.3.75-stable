@@ -198,6 +198,7 @@ BlockIO InterpreterCreateQuery::createDatabase(ASTCreateQuery & create)
     auto guard = DatabaseCatalog::instance().getDDLGuard(database_name, "");
 
     /// Database can be created before or it can be created concurrently in another thread, while we were waiting in DDLGuard
+    /// 数据库可以提前创建，或者在另一个线程中并发创建，而我们等待在DDLGuard中。
     if (DatabaseCatalog::instance().isDatabaseExist(database_name))
     {
         if (create.if_not_exists)
@@ -233,6 +234,7 @@ BlockIO InterpreterCreateQuery::createDatabase(ASTCreateQuery & create)
     auto db_disk = getContext()->getDatabaseDisk();
 
     /// Will write file with database metadata, if needed.
+    /// 如果需要，将写入数据库元数据文件。
     String database_name_escaped = escapeForFileName(database_name);
     fs::path metadata_dir_path("metadata");
     fs::path store_dir_path("store");
@@ -240,12 +242,14 @@ BlockIO InterpreterCreateQuery::createDatabase(ASTCreateQuery & create)
     fs::path metadata_file_tmp_path = metadata_dir_path / (database_name_escaped + ".sql.tmp");
     fs::path metadata_file_path = metadata_dir_path / (database_name_escaped + ".sql");
 
+    /// 数据库元数据路径。
     fs::path metadata_path;
     if (!create.storage && create.attach)
     {
         if (!db_disk->existsFile(metadata_file_path))
             throw Exception(ErrorCodes::UNKNOWN_DATABASE_ENGINE, "Database engine must be specified for ATTACH DATABASE query");
         /// Short syntax: try read database definition from file
+        /// 短语法：尝试从文件中读取数据库定义。
         auto ast = DatabaseOnDisk::parseQueryFromMetadata(nullptr, getContext(), metadata_file_path);
         create = ast->as<ASTCreateQuery &>();
         if (create.table || !create.storage)
@@ -258,6 +262,7 @@ BlockIO InterpreterCreateQuery::createDatabase(ASTCreateQuery & create)
     {
         /// For new-style databases engine is explicitly specified in .sql
         /// When attaching old-style database during server startup, we must always use Ordinary engine
+        /// 对于新风格的引擎，在服务器启动时附加旧风格的引擎时，我们必须始终使用Ordinary引擎。
         if (create.attach)
             throw Exception(ErrorCodes::UNKNOWN_DATABASE_ENGINE, "Database engine must be specified for ATTACH DATABASE query");
         if (!create.storage)
@@ -281,16 +286,21 @@ BlockIO InterpreterCreateQuery::createDatabase(ASTCreateQuery & create)
     if (create.storage && !create.storage->engine)
         throw Exception(ErrorCodes::INCORRECT_QUERY, "Database engine must be specified");
 
+    /// 如果数据库引擎是Atomic、Replicated或MaterializedPostgreSQL，则需要生成UUID。
     if (create.storage->engine->name == "Atomic"
         || create.storage->engine->name == "Replicated"
         || create.storage->engine->name == "MaterializedPostgreSQL")
     {
+        /// 如果正在附加数据库且没有UUID，则抛出异常。
         if (create.attach && create.uuid == UUIDHelpers::Nil)
             throw Exception(ErrorCodes::INCORRECT_QUERY, "UUID must be specified for ATTACH. "
                             "If you want to attach existing database, use just ATTACH DATABASE {};", create.getDatabase());
+
+        /// 如果UUID为空，则生成一个UUID。
         if (create.uuid == UUIDHelpers::Nil)
             create.uuid = UUIDHelpers::generateV4();
 
+        /// 数据库元数据路径。
         metadata_path = store_dir_path / DatabaseCatalog::getPathForUUID(create.uuid);
 
         if (!create.attach && db_disk->existsDirectory(metadata_path) && !db_disk->isDirectoryEmpty(metadata_path))
@@ -333,6 +343,8 @@ BlockIO InterpreterCreateQuery::createDatabase(ASTCreateQuery & create)
 
     /// Lock uuid, so we will known it's already in use.
     /// We do it when attaching databases on server startup (internal) and on CREATE query (!create.attach);
+    /// 锁定UUID，以便我们知道它已经被使用。
+    /// 我们在服务器启动时附加数据库时（内部）和在CREATE查询时（!create.attach）执行此操作。
     TemporaryLockForUUIDDirectory uuid_lock;
     if (need_lock_uuid)
         uuid_lock = TemporaryLockForUUIDDirectory{create.uuid};
@@ -414,6 +426,7 @@ BlockIO InterpreterCreateQuery::createDatabase(ASTCreateQuery & create)
 }
 
 
+// 格式化列，将列的名称和类型转换为AST表达式列表。
 ASTPtr InterpreterCreateQuery::formatColumns(const NamesAndTypesList & columns)
 {
     auto columns_list = std::make_shared<ASTExpressionList>();
@@ -528,6 +541,7 @@ ASTPtr InterpreterCreateQuery::formatColumns(const ColumnsDescription & columns)
     return columns_list;
 }
 
+// 格式化索引，将索引的定义转换为AST表达式列表。
 ASTPtr InterpreterCreateQuery::formatIndices(const IndicesDescription & indices)
 {
     auto res = std::make_shared<ASTExpressionList>();
@@ -538,6 +552,7 @@ ASTPtr InterpreterCreateQuery::formatIndices(const IndicesDescription & indices)
     return res;
 }
 
+// 格式化约束，将约束的定义转换为AST表达式列表。
 ASTPtr InterpreterCreateQuery::formatConstraints(const ConstraintsDescription & constraints)
 {
     auto res = std::make_shared<ASTExpressionList>();
@@ -548,6 +563,7 @@ ASTPtr InterpreterCreateQuery::formatConstraints(const ConstraintsDescription & 
     return res;
 }
 
+// 格式化投影，将投影的定义转换为AST表达式列表。
 ASTPtr InterpreterCreateQuery::formatProjections(const ProjectionsDescription & projections)
 {
     auto res = std::make_shared<ASTExpressionList>();
@@ -558,6 +574,7 @@ ASTPtr InterpreterCreateQuery::formatProjections(const ProjectionsDescription & 
     return res;
 }
 
+// 获取列的类型，根据列的声明和加载严格性级别，返回列的类型。
 DataTypePtr InterpreterCreateQuery::getColumnType(
     const ASTColumnDeclaration & col_decl, const LoadingStrictnessLevel mode, const bool make_columns_nullable)
 {
@@ -599,13 +616,16 @@ DataTypePtr InterpreterCreateQuery::getColumnType(
     return column_type;
 }
 
+// 获取列的描述，根据列的AST表达式列表、上下文和加载严格性级别，返回列的描述。
 ColumnsDescription InterpreterCreateQuery::getColumnsDescription(
     const ASTExpressionList & columns_ast, ContextPtr context_, LoadingStrictnessLevel mode, bool is_restore_from_backup)
 {
     /// First, deduce implicit types.
 
-    /** all default_expressions as a single expression list,
-     *  mixed with conversion-columns for each explicitly specified type */
+    /* all default_expressions as a single expression list,
+     *  mixed with conversion-columns for each explicitly specified type
+     *  所有默认表达式作为单个表达式列表，混合了每个显式指定的类型的转换列。
+     */
 
     DefaultExpressionsInfo default_expr_info{std::make_shared<ASTExpressionList>()};
     NamesAndTypesList column_names_and_types;
@@ -738,7 +758,7 @@ ColumnsDescription InterpreterCreateQuery::getColumnsDescription(
     return res;
 }
 
-
+// 获取约束的描述，根据约束的AST表达式列表、列的描述和上下文，返回约束的描述。
 ConstraintsDescription InterpreterCreateQuery::getConstraintsDescription(
     const ASTExpressionList * constraints, const ColumnsDescription & columns, ContextPtr local_context)
 {
@@ -754,30 +774,36 @@ ConstraintsDescription InterpreterCreateQuery::getConstraintsDescription(
     return ConstraintsDescription{constraints_data};
 }
 
-
+// 获取表的属性，并规范化CREATE查询。
 InterpreterCreateQuery::TableProperties InterpreterCreateQuery::getTablePropertiesAndNormalizeCreateQuery(
     ASTCreateQuery & create, LoadingStrictnessLevel mode) const
 {
     /// Set the table engine if it was not specified explicitly.
+    /// 设置表引擎，如果未显式指定。
     setEngine(create);
 
     /// We have to check access rights again (in case engine was changed).
+    /// 我们必须再次检查访问权限（如果引擎已更改）。
     if (create.storage && create.storage->engine)
         getContext()->checkAccess(AccessType::TABLE_ENGINE, create.storage->engine->name);
 
     /// If this is a TimeSeries table then we need to normalize list of columns (add missing columns and reorder), and also set inner table engines.
+    /// 如果这是一个TimeSeries表，那么我们需要规范化列列表（添加缺失的列并重新排序），并设置内部表引擎。
     if (create.is_time_series_table && (mode < LoadingStrictnessLevel::ATTACH))
         StorageTimeSeries::normalizeTableDefinition(create, getContext());
 
     TableProperties properties;
     TableLockHolder as_storage_lock;
 
+    /// 如果存在列列表，则获取列的描述。
     if (create.columns_list)
     {
+        /// 如果这是一个表函数，并且存在索引或约束，则抛出异常。
         if (create.as_table_function && (create.columns_list->indices || create.columns_list->constraints))
             throw Exception(ErrorCodes::INCORRECT_QUERY, "Indexes and constraints are not supported for table functions");
 
         /// Dictionaries have dictionary_attributes_list instead of columns_list
+        /// 如果这是一个字典，则抛出异常。
         assert(!create.is_dictionary);
 
         if (create.columns_list->columns)
@@ -795,13 +821,14 @@ InterpreterCreateQuery::TableProperties InterpreterCreateQuery::getTableProperti
                 const auto & settings = getContext()->getSettingsRef();
                 if (index_desc.type == GIN_INDEX_NAME && !settings[Setting::allow_experimental_full_text_index])
                     throw Exception(ErrorCodes::SUPPORT_IS_DISABLED, "The experimental full-text index feature is disabled. Enable the setting 'allow_experimental_full_text_index' to use it");
-                /// ---
+
                 /// Temporary checks during a transition period. Remove this block one year after GIN indexes became GA.
                 if (index_desc.type == FULL_TEXT_INDEX_NAME && !settings[Setting::allow_experimental_full_text_index])
                     throw Exception(ErrorCodes::ILLEGAL_INDEX, "The 'full_text' index type is deprecated. Please use the 'gin' index type instead");
+
                 if (index_desc.type == INVERTED_INDEX_NAME && !settings[Setting::allow_experimental_inverted_index])
                     throw Exception(ErrorCodes::ILLEGAL_INDEX, "The 'inverted' index type is deprecated. Please use the 'gin' index type instead");
-                /// ---
+                
                 if (index_desc.type == "vector_similarity" && !settings[Setting::allow_experimental_vector_similarity_index])
                     throw Exception(ErrorCodes::SUPPORT_IS_DISABLED, "The experimental vector similarity index feature is disabled. Enable the setting 'allow_experimental_vector_similarity_index' to use it");
 
@@ -823,25 +850,32 @@ InterpreterCreateQuery::TableProperties InterpreterCreateQuery::getTableProperti
         StoragePtr as_storage = DatabaseCatalog::instance().getTable({as_database_name, create.as_table}, getContext());
 
         /// as_storage->getColumns() and setEngine(...) must be called under structure lock of other_table for CREATE ... AS other_table.
+        /// 在CREATE ... AS other_table下，as_storage->getColumns()和setEngine(...)必须在other_table的结构锁下调用。
         as_storage_lock = as_storage->lockForShare(getContext()->getCurrentQueryId(), getContext()->getSettingsRef()[Setting::lock_acquire_timeout]);
         auto as_storage_metadata = as_storage->getInMemoryMetadataPtr();
         properties.columns = as_storage_metadata->getColumns();
 
+        /// 如果创建查询没有注释，并且as_storage_metadata有注释，则设置创建查询的注释。
         if (!create.comment && !as_storage_metadata->comment.empty())
             create.set(create.comment, std::make_shared<ASTLiteral>(as_storage_metadata->comment));
 
         /// Secondary indices and projections make sense only for MergeTree family of storage engines.
         /// We should not copy them for other storages.
+        /// 二级索引和投影仅对MergeTree存储引擎有意义。
+        /// 我们不应该为其他存储复制它们。
         if (create.storage && endsWith(create.storage->engine->name, "MergeTree"))
         {
-            /// Copy secondary indexes but only the ones which were not implicitly created. These will be re-generated later again and need
-            /// not be copied.
+            /// Copy secondary indexes but only the ones which were not implicitly created.
+            /// These will be re-generated later again and need not be copied.
+            /// 复制二级索引，但只复制那些未隐式创建的索引。
+            /// 这些将在以后再次生成，不需要复制。
             const auto & indices = as_storage_metadata->getSecondaryIndices();
             for (const auto & index : indices)
                 if (!index.isImplicitlyCreated())
                     properties.indices.push_back(index);
 
             /// Copy projections.
+            /// 复制投影。
             properties.projections = as_storage_metadata->getProjections().clone();
 
             /// CREATE TABLE AS should copy PRIMARY KEY, ORDER BY, and similar clauses.
@@ -1018,10 +1052,12 @@ InterpreterCreateQuery::TableProperties InterpreterCreateQuery::getTableProperti
     return properties;
 }
 
+// 验证表结构，检查重复列和数据类型。
 void InterpreterCreateQuery::validateTableStructure(const ASTCreateQuery & create,
                                                     const InterpreterCreateQuery::TableProperties & properties) const
 {
-    /// Check for duplicates
+    /// Check for duplicates.
+    /// 检查重复列。
     std::set<String> all_columns;
     for (const auto & column : properties.columns)
     {
@@ -1033,6 +1069,8 @@ void InterpreterCreateQuery::validateTableStructure(const ASTCreateQuery & creat
 
     /// If it's not attach and not materialized view to existing table,
     /// we need to validate data types (check for experimental or suspicious types).
+    /// 如果这不是附加操作，并且不是到现有表的物化视图，
+    /// 我们需要验证数据类型（检查实验或可疑类型）。
     if (!create.attach && !create.is_materialized_view)
     {
         DataTypeValidationSettings validation_settings(settings);
@@ -1041,6 +1079,7 @@ void InterpreterCreateQuery::validateTableStructure(const ASTCreateQuery & creat
     }
 }
 
+// 验证虚拟列，检查虚拟列是否与存储的列冲突。
 void validateVirtualColumns(const IStorage & storage)
 {
     auto virtual_columns = storage.getVirtualsPtr();

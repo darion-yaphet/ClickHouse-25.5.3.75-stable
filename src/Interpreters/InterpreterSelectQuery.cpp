@@ -3405,6 +3405,7 @@ bool InterpreterSelectQuery::isQueryWithFinal(const SelectQueryInfo & info)
 
 void registerInterpreterSelectQuery(InterpreterFactory & factory)
 {
+    // 注册 InterpreterSelectQuery 解释器
     auto create_fn = [] (const InterpreterFactory::Arguments & args)
     {
         return std::make_unique<InterpreterSelectQuery>(args.query, args.context, args.options);

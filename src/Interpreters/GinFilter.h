@@ -37,7 +37,9 @@ using GinSegmentWithRowIdRangeVector = std::vector<GinSegmentWithRowIdRange>;
 
 /// GinFilter provides underlying functionalities for building full-text index and also
 /// it does filtering the unmatched rows according to its query string.
+/// GinFilter 提供了构建全文索引和根据查询字符串过滤未匹配行的底层功能。
 /// It also builds and uses skipping index which stores (segmentID, RowIDStart, RowIDEnd) triples.
+/// 它还构建并使用跳过索引，该索引存储（segmentID，RowIDStart，RowIDEnd）三元组。
 class GinFilter
 {
 public:

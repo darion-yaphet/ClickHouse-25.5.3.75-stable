@@ -33,6 +33,7 @@ class IQueryPlanStep;
 using QueryPlanStepPtr = std::unique_ptr<IQueryPlanStep>;
 
 /// Single step of query plan.
+/// 查询计划中的单个步骤。
 class IQueryPlanStep
 {
 public:
@@ -47,11 +48,16 @@ public:
     virtual String getSerializationName() const { return getName(); }
 
     /// Add processors from current step to QueryPipeline.
+    /// 将当前步骤的处理器添加到 QueryPipeline 中。
     /// Calling this method, we assume and don't check that:
     ///   * pipelines.size() == getInputHeaders.size()
     ///   * header from each pipeline is the same as header from corresponding input
+    /// 调用此方法时，我们假设并检查：
+    ///   * pipelines.size() == getInputHeaders.size()
+    ///   * 每个管道的头与相应输入的头相同
     /// Result pipeline must contain any number of ports with compatible output header if hasOutputHeader(),
     ///   or pipeline should be completed otherwise.
+    /// 结果管道必须包含任何数量的端口，如果 hasOutputHeader() 为 true，则输出头兼容，否则管道应该完成。
     virtual QueryPipelineBuilderPtr updatePipeline(QueryPipelineBuilders pipelines, const BuildQueryPipelineSettings & settings) = 0;
 
     const Headers & getInputHeaders() const { return input_headers; }
@@ -60,6 +66,7 @@ public:
     const Header & getOutputHeader() const;
 
     /// Methods to describe what this step is needed for.
+    /// 方法来描述这个步骤的用途。
     const std::string & getStepDescription() const { return step_description; }
     void setStepDescription(std::string description) { step_description = std::move(description); }
 
@@ -120,10 +127,13 @@ protected:
     std::optional<Header> output_header;
 
     /// Text description about what current step does.
+    /// 文本描述当前步骤的作用。
     std::string step_description;
 
     /// This field is used to store added processors from this step.
     /// It is used only for introspection (EXPLAIN PIPELINE).
+    /// 这个字段用于存储当前步骤添加的处理器。
+    /// 它只用于内省（EXPLAIN PIPELINE）。
     Processors processors;
 
     static void describePipeline(const Processors & processors, FormatSettings & settings);
